@@ -3,19 +3,34 @@ import type { AoRecord, QualificationFiche } from "@/lib/aoTypes";
 function shortText(value: unknown, max = 180) {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
   if (!text) return "À confirmer";
-  return text.length > max ? `${text.slice(0, max).trim()}...` : text;
+  return text.length > max ? `${text.slice(0, max).trim()}…` : text;
 }
 
 function asList(items: string[] | undefined, fallback: string[]) {
   return items?.length ? items.slice(0, 3) : fallback;
 }
 
-export function DecisionPanel({ ao, qualification }: { ao: AoRecord; qualification: Partial<QualificationFiche> | null }) {
+function recoBadgeClass(recommendation: string): string {
+  const v = recommendation.toLowerCase().trim().replace(/\s+/g, "-");
+  if (v === "go") return "go";
+  if (v === "no-go") return "no-go";
+  return "watch";
+}
+
+export function DecisionPanel({
+  ao,
+  qualification
+}: {
+  ao: AoRecord;
+  qualification: Partial<QualificationFiche> | null;
+}) {
   const intelligence = qualification?.intelligence;
   const recommendation = intelligence?.recommendation || ao.decisionIa || "À qualifier";
   const score = intelligence?.goNoGoScore;
   const confidence = intelligence?.confidenceLevel || "À confirmer";
-  const reasons = asList(intelligence?.winThemes, [shortText(ao.justificationIa || qualification?.recommendation || "Analyse IA à générer.")]);
+  const reasons = asList(intelligence?.winThemes, [
+    shortText(ao.justificationIa || qualification?.recommendation || "Analyse IA à générer.")
+  ]);
   const risks = intelligence?.risks?.slice(0, 3) ?? [];
   const nextAction =
     intelligence?.recommendation === "GO"
@@ -29,7 +44,7 @@ export function DecisionPanel({ ao, qualification }: { ao: AoRecord; qualificati
       <div>
         <p className="eyebrow">Décision IA</p>
         <div className="decision-title-row">
-          <span className={`decision-badge ${String(recommendation).toLowerCase().replace(/\s+/g, "-")}`}>{recommendation}</span>
+          <span className={`decision-badge ${recoBadgeClass(String(recommendation))}`}>{recommendation}</span>
           {typeof score === "number" ? <strong className="decision-score">{score}/100</strong> : null}
         </div>
         <p className="muted">Confiance : {confidence}</p>
@@ -46,7 +61,13 @@ export function DecisionPanel({ ao, qualification }: { ao: AoRecord; qualificati
         <div>
           <span>Vigilances</span>
           <ul>
-            {risks.length ? risks.map((risk) => <li key={risk.label}>{shortText(`${risk.label} : ${risk.mitigation}`, 130)}</li>) : <li>Risques à confirmer.</li>}
+            {risks.length ? (
+              risks.map((risk) => (
+                <li key={risk.label}>{shortText(`${risk.label} : ${risk.mitigation}`, 130)}</li>
+              ))
+            ) : (
+              <li>Risques à confirmer.</li>
+            )}
           </ul>
         </div>
         <div className="next-action">

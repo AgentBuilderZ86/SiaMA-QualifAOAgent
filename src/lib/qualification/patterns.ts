@@ -298,6 +298,7 @@ export function detectStrategicClient(client: string): PatternBonus | null {
   return null;
 }
 
+/** Seuils métier alignés spec pipeline : score >= 6 → GO, >= 3 → WATCH ; NOGO si `hasBlocker` (signaux bloquants). */
 function decisionFromScore(score: number, hasBlocker: boolean): { decision: "GO" | "WATCH" | "NO GO"; tone: "go" | "watch" | "nogo"; label: string } {
   if (hasBlocker) return { decision: "NO GO", tone: "nogo", label: "NO GO — Signal bloquant détecté" };
   if (score >= 6) return { decision: "GO", tone: "go", label: "GO — Répondre fortement recommandé" };

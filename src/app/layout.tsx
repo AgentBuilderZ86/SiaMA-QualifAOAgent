@@ -1,22 +1,29 @@
 import type { Metadata } from "next";
+import { Inter_Tight, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
+const interTight = Inter_Tight({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter-tight",
+  display: "swap"
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-jetbrains-mono",
+  display: "swap"
+});
+
 export const metadata: Metadata = {
-  title: "SiaMA Qualif AO",
-  description: "Dashboard de qualification et suivi des appels d'offres"
+  title: "SiaGPT · AO Agent",
+  description: "Agent de qualification d'appels d'offres - Sia Partners Maroc"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fr">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&display=swap"
-        />
-      </head>
+    <html lang="fr" className={`${interTight.variable} ${jetbrainsMono.variable}`}>
       <body>{children}</body>
     </html>
   );

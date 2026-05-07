@@ -1,5 +1,6 @@
 import type { AoRecord, AoStatus } from "@/lib/ao";
 import { transitionAction } from "../actions";
+import { Pill } from "@/components/shell";
 
 const WORKFLOW: Array<{ status: AoStatus; label: string; helper: string }> = [
   { status: "A QUALIFIER", label: "À qualifier", helper: "Analyse initiale" },
@@ -26,7 +27,7 @@ function transitionButton(ao: AoRecord, status: AoStatus, label: string, note: s
       <input type="hidden" name="aoNum" value={ao.aoNum} />
       <input type="hidden" name="status" value={status} />
       <input type="hidden" name="note" value={note} />
-      <button className="button ghost" type="submit">
+      <button className="btn btn--ghost" type="submit">
         {label}
       </button>
     </form>
@@ -36,6 +37,7 @@ function transitionButton(ao: AoRecord, status: AoStatus, label: string, note: s
 export function WorkflowFlow({ ao, enabled }: { ao: AoRecord; enabled: boolean }) {
   const index = currentIndex(ao.statut);
   const next = WORKFLOW[index + 1];
+  const isClosed = ao.statut === "PW" || ao.statut === "PL";
 
   return (
     <section className="card section">
@@ -44,16 +46,19 @@ export function WorkflowFlow({ ao, enabled }: { ao: AoRecord; enabled: boolean }
           <p className="eyebrow">Workflow</p>
           <h2>Avancement opportunité</h2>
         </div>
-        <span className={`badge ${ao.statut.toLowerCase().replace(/\s+/g, "-")}`}>{ao.statut}</span>
+        <Pill status={ao.statut} />
       </div>
       <div className="workflow-steps">
         {WORKFLOW.map((step, stepIndex) => (
-          <div className={`workflow-step ${stepIndex < index ? "done" : ""} ${stepIndex === index ? "active" : ""}`} key={step.status}>
+          <div
+            className={`workflow-step ${stepIndex < index ? "done" : ""} ${stepIndex === index ? "active" : ""}`}
+            key={step.status}
+          >
             <strong>{step.label}</strong>
             <span>{step.helper}</span>
           </div>
         ))}
-        <div className={`workflow-step ${["PW", "PL"].includes(ao.statut) ? "active" : ""}`}>
+        <div className={`workflow-step ${isClosed ? "active" : ""}`}>
           <strong>Clôture</strong>
           <span>Win / Loss</span>
         </div>

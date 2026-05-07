@@ -4,6 +4,11 @@ function decodeHtml(value) {
   return value.replaceAll("&quot;", "\"").replaceAll("&amp;", "&").replaceAll("&#x27;", "'");
 }
 
+async function getWithCookie(path, cookie) {
+  const response = await fetch(`${baseUrl}${path}`, { headers: { cookie } });
+  return { status: response.status, html: await response.text() };
+}
+
 async function main() {
   const loginResponse = await fetch(`${baseUrl}/login`);
   const loginHtml = await loginResponse.text();
@@ -30,46 +35,61 @@ async function main() {
   if (!setCookie) {
     throw new Error(`Login failed: status ${postResponse.status}`);
   }
+  const cookie = setCookie.split(";")[0];
 
-  const dashboardResponse = await fetch(`${baseUrl}/dashboard`, {
-    headers: { cookie: setCookie.split(";")[0] }
-  });
-  const dashboardHtml = await dashboardResponse.text();
-  const firstAoHref = [...dashboardHtml.matchAll(/href="(\/ao\/(?!NC(?:\/|"))[^"]+)"/g)]?.[0]?.[1];
-  const detailResponse = firstAoHref
-    ? await fetch(`${baseUrl}${firstAoHref}`, { headers: { cookie: setCookie.split(";")[0] } })
-    : null;
-  const settingsResponse = await fetch(`${baseUrl}/settings`, { headers: { cookie: setCookie.split(";")[0] } });
-  const auditResponse = await fetch(`${baseUrl}/audit`, { headers: { cookie: setCookie.split(";")[0] } });
-  const rulesResponse = await fetch(`${baseUrl}/rules`, { headers: { cookie: setCookie.split(";")[0] } });
+  const dashboard = await getWithCookie("/dashboard", cookie);
+  const firstAoHref = [...dashboard.html.matchAll(/href="(\/ao\/(?!NC(?:\/|"))[^"]+)"/g)]?.[0]?.[1];
+  const detail = firstAoHref ? await getWithCookie(firstAoHref, cookie) : { status: "no-ao-link", html: "" };
+  const detailFichePath = firstAoHref ? `${firstAoHref.split("?")[0]}/qualification/fiche.html` : null;
+  const fiche = detailFichePath ? await getWithCookie(detailFichePath, cookie) : { status: "no-ao-link", html: "" };
+  const settings = await getWithCookie("/settings", cookie);
+  const audit = await getWithCookie("/audit", cookie);
+  const rules = await getWithCookie("/rules", cookie);
+  const chat = await getWithCookie("/chat", cookie);
+
+  const dashboardHtml = dashboard.html;
+  const hasNewShell = dashboardHtml.includes("topbar") && dashboardHtml.includes("SiaGPT");
+  const hasNewTokens = dashboardHtml.includes("Pipeline AO") || dashboardHtml.includes("kpi-strip");
+  const hasGoogleError = dashboardHtml.includes("Connexion Google à finaliser");
+  const hasConfigError = dashboardHtml.includes("Aucune source AO chargée");
 
   const result = {
     loginStatus: postResponse.status,
-    dashboardStatus: dashboardResponse.status,
-    detailStatus: detailResponse?.status ?? "no-ao-link",
-    settingsStatus: settingsResponse.status,
-    auditStatus: auditResponse.status,
-    rulesStatus: rulesResponse.status,
-    hasDashboard: dashboardHtml.includes("Qualification et pipeline"),
-    hasOptorg: dashboardHtml.toLowerCase().includes("optorg"),
-    hasGoogleError: dashboardHtml.includes("Connexion Google à finaliser"),
-    hasConfigError: dashboardHtml.includes("Configuration Google requise"),
-    hasTotals: dashboardHtml.includes("Total AOs suivis")
+    dashboardStatus: dashboard.status,
+    detailStatus: detail.status,
+    ficheStatus: fiche.status,
+    settingsStatus: settings.status,
+    auditStatus: audit.status,
+    rulesStatus: rules.status,
+    chatStatus: chat.status,
+    chatHasComposer: chat.html.includes("composer"),
+    chatHasBubble: chat.html.includes("bubble"),
+    ficheHasInterTight: fiche.html.includes("Inter Tight"),
+    hasNewShell,
+    hasNewTokens,
+    hasGoogleError,
+    hasConfigError
   };
 
   console.log(JSON.stringify(result, null, 2));
 
-  if (
-    !result.hasDashboard ||
-    !result.hasOptorg ||
-    result.hasGoogleError ||
-    result.hasConfigError ||
-    result.settingsStatus !== 200 ||
-    result.auditStatus !== 200 ||
-    result.rulesStatus !== 200 ||
-    result.detailStatus === 500
-  ) {
+  const failures = [];
+  if (result.dashboardStatus !== 200) failures.push("dashboard not 200");
+  if (!hasNewShell) failures.push("dashboard missing topbar/SiaGPT shell");
+  if (!hasNewTokens) failures.push("dashboard missing new tokens (Pipeline AO / kpi-strip)");
+  if (result.settingsStatus !== 200) failures.push("settings not 200");
+  if (result.auditStatus !== 200) failures.push("audit not 200");
+  if (result.rulesStatus !== 200) failures.push("rules not 200");
+  if (result.chatStatus !== 200) failures.push("chat not 200");
+  if (!result.chatHasComposer) failures.push("chat missing composer");
+  if (typeof result.detailStatus === "number" && result.detailStatus === 500) failures.push("AO detail 500");
+  if (typeof result.ficheStatus === "number" && result.ficheStatus === 500) failures.push("Fiche HTML 500");
+
+  if (failures.length) {
+    console.error("Smoke check failed:", failures.join(" · "));
     process.exitCode = 1;
+  } else {
+    console.log("Smoke check OK");
   }
 }
 

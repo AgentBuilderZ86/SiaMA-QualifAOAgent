@@ -13,8 +13,11 @@
     "plugins": []
   },
   "include": [
+    "src/lib/documents.ts",
     "src/lib/qualification/intelligence.ts",
     "src/lib/qualification/intelligence.test.ts",
+    "src/lib/qualification/filenameSignals.ts",
+    "src/lib/qualification/documentMetadata.ts",
     "src/lib/qualification/patterns.ts",
     "src/lib/qualification/research.ts",
     "src/lib/qualification/htmlFiche.ts",

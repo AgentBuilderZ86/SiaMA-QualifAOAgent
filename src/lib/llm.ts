@@ -1,4 +1,5 @@
 import type { AoRecord, ProposalSection, QualificationFiche } from "@/lib/aoTypes";
+import { completeChat, hasConfiguredLlm } from "@/lib/llmChat";
 
 type GenerateInput = {
   task: string;
@@ -106,11 +107,7 @@ function normalizeProposalSection(
 }
 
 export async function generateWithGuardrails(input: GenerateInput) {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY;
-  const model = process.env.OPENAI_MODEL || process.env.LLM_MODEL || "gpt-4o-mini";
-  const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-
-  if (!apiKey) return fallbackText(input);
+  if (!hasConfiguredLlm()) return fallbackText(input);
 
   const system = [
     "Tu es un assistant pour qualification d'appels d'offres.",
@@ -120,38 +117,23 @@ export async function generateWithGuardrails(input: GenerateInput) {
     "Cite toujours les sources internes reçues."
   ].join(" ");
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: system },
-        {
-          role: "user",
-          content: JSON.stringify({
-            task: input.task,
-            ao: input.ao,
-            context: input.context,
-            sources: input.sources
-          })
-        }
-      ]
-    })
+  const text = await completeChat({
+    system,
+    user: JSON.stringify({
+      task: input.task,
+      ao: input.ao,
+      context: input.context,
+      sources: input.sources
+    }),
+    temperature: 0.2,
+    maxOutputTokens: 4096
   });
 
-  if (!response.ok) return fallbackText(input);
-  const json = await response.json();
-  return json.choices?.[0]?.message?.content || fallbackText(input);
+  return text || fallbackText(input);
 }
 
 export async function generateQualificationRecommendation(ao: AoRecord, fiche: QualificationFiche) {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY;
-  if (!apiKey) {
+  if (!hasConfiguredLlm()) {
     const strengths = [
       fiche.contexte !== "À confirmer" ? "contexte client documenté" : "",
       fiche.perimetre !== "À confirmer" ? "périmètre identifié" : "",

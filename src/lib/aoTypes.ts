@@ -1,4 +1,5 @@
 import type { SheetRecord, SheetRow } from "@/lib/google";
+import type { FilenameSignals } from "@/lib/qualification/filenameSignals";
 import type { PatternScoreResult } from "@/lib/qualification/patterns";
 
 export const AO_STATUSES = ["A QUALIFIER", "GO", "NO GO", "BO", "P2P", "PS", "PITCH", "PW", "PL", "AUTRE"] as const;
@@ -50,6 +51,15 @@ export type PipelineEvent = {
   note: string;
 };
 
+/** Indices regex / audit extraction (ne remplace pas les champs AO Sheet). */
+export type QualificationExtractionEvidence = {
+  metadataMatchNotes?: string[];
+  emailsDetected?: string[];
+  dateLimiteRegex?: string;
+  lieuRegex?: string;
+  maitreOuvrageRegex?: string;
+};
+
 export type QualificationFiche = {
   contexte: string;
   objet: string;
@@ -70,6 +80,9 @@ export type QualificationFiche = {
   recommendation: string;
   sources: string[];
   intelligence?: IntelligentQualificationFiche;
+  /** Indices dérivés du nom de fichier uploadé (sans écraser client AO Sheet). */
+  filenameSignals?: FilenameSignals;
+  extractionEvidence?: QualificationExtractionEvidence;
 };
 
 export type SourcedFact = {

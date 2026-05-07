@@ -1,5 +1,7 @@
 import { aoRepository } from "@/lib/aoRepository";
 import { extractDocumentSections, extractUploadedDocument, summarizeDocumentText } from "@/lib/documents";
+import { extractKeyMetadata, isPlaceholderSection } from "@/lib/qualification/documentMetadata";
+import { filenameSignalsPrefix, parseFilenameSignals } from "@/lib/qualification/filenameSignals";
 import { simulateFinancials } from "@/lib/finance";
 import { generateProposalSection, generateQualificationRecommendation } from "@/lib/llm";
 import { getSheetsConfigStatus } from "@/lib/google";
@@ -131,11 +133,58 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
   if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
 
   const uploaded = await extractUploadedDocument(formData.get("document") as File | null);
+  const filenameSignals = parseFilenameSignals(uploaded.name || "");
   const manualExtract = String(formData.get("documentExtract") || "");
-  const documentExtract = summarizeDocumentText(uploaded.text, manualExtract);
-  const sections = extractDocumentSections(documentExtract);
+  const prefixedDocText = filenameSignalsPrefix(filenameSignals) + uploaded.text;
+  const documentExtract = summarizeDocumentText(prefixedDocText, manualExtract);
+  const sectionsRaw = extractDocumentSections(documentExtract);
+  const meta = extractKeyMetadata(documentExtract);
+
+  let mergedBudget = sectionsRaw.budget;
+  if (isPlaceholderSection(mergedBudget) && meta.budget) mergedBudget = meta.budget;
+
+  let mergedDuree = sectionsRaw.duree;
+  if (isPlaceholderSection(mergedDuree) && meta.duree) mergedDuree = meta.duree;
+
+  let mergedPerimetre = sectionsRaw.perimetre;
+  if (isPlaceholderSection(mergedPerimetre) && meta.lieu) {
+    mergedPerimetre = `Lieu (détection texte) : ${meta.lieu}`;
+  }
+
+  let mergedProfils = sectionsRaw.profils;
+  if (isPlaceholderSection(mergedProfils) && meta.maitreOuvrage) {
+    mergedProfils = `Maître d'ouvrage / commanditaire (détection texte) : ${meta.maitreOuvrage}`;
+  }
+
+  const sections = {
+    ...sectionsRaw,
+    budget: mergedBudget,
+    duree: mergedDuree,
+    perimetre: mergedPerimetre,
+    profils: mergedProfils
+  };
+
   const referentials = await aoRepository.readReferentials();
   const fromForm = (name: string, fallback: string) => String(formData.get(name) || "").trim() || fallback || "À confirmer";
+
+  const extractionEvidence =
+    meta.matchNotes.length || meta.emails.length || meta.dateLimite || meta.lieu || meta.maitreOuvrage
+      ? {
+          metadataMatchNotes: meta.matchNotes.length ? meta.matchNotes : undefined,
+          emailsDetected: meta.emails.length ? meta.emails : undefined,
+          dateLimiteRegex: meta.dateLimite,
+          lieuRegex: meta.lieu,
+          maitreOuvrageRegex: meta.maitreOuvrage
+        }
+      : undefined;
+
+  const pipelineNotes = (() => {
+    const base = uploaded.warning || "";
+    const hint = meta.matchNotes[0];
+    if (hint && base.length < 350) return [base, hint].filter(Boolean).join(" · ");
+    return base;
+  })();
+
   const fiche: QualificationFiche = {
     contexte: fromForm("contexte", sections.contexte),
     objet: sections.objet || ao.sujet,
@@ -154,7 +203,9 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
     documentExtract,
     extractionStatus: uploaded.warning || "Document analysé",
     recommendation: "À générer",
-    sources: ["Google Sheets AO", uploaded.name || "Saisie qualification"].filter(Boolean)
+    sources: ["Google Sheets AO", uploaded.name || "Saisie qualification"].filter(Boolean),
+    filenameSignals: Object.keys(filenameSignals).length ? filenameSignals : undefined,
+    extractionEvidence
   };
   fiche.recommendation = await generateQualificationRecommendation(ao, fiche);
   fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, formData.get("enrichWeb") === "yes");
@@ -162,7 +213,7 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
   await aoRepository.upsertPipeline(ao, "BO", {
     "Fiche qualification": JSON.stringify(fiche),
     Recommandation: fiche.recommendation,
-    Notes: uploaded.warning
+    Notes: pipelineNotes
   });
   await aoRepository.appendHistory({
     timestamp: new Date().toISOString(),

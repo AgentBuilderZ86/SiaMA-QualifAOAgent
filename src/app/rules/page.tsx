@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { readSheet } from "@/lib/google";
 import { requireUser } from "@/lib/auth";
+import { AppShell, PageHeader, type SideRailGroup } from "@/components/shell";
 
 export default async function RulesPage() {
-  await requireUser();
+  const user = await requireUser();
   let rules: Record<string, string>[] = [];
   let feedback: Record<string, string>[] = [];
   let error = "";
@@ -15,30 +16,49 @@ export default async function RulesPage() {
     error = err instanceof Error ? err.message : "Règles non disponibles.";
   }
 
+  const rail: SideRailGroup[] = [
+    {
+      title: "Pilotage",
+      items: [
+        { label: "📊 Pipeline", href: "/dashboard" },
+        { label: "💬 SiaGPT", href: "/chat" }
+      ]
+    },
+    {
+      title: "Audit & gouvernance",
+      items: [
+        { label: "📋 Historique transitions", href: "/audit" },
+        { label: "🛡 Règles scoring", href: "/rules", active: true },
+        { label: "⚙ Référentiels", href: "/settings" }
+      ]
+    }
+  ];
+
   return (
-    <main className="page">
-      <div className="shell">
-        <section className="card hero">
-          <div>
-            <p className="eyebrow">Scoring</p>
-            <h1>Règles et apprentissage</h1>
-            <p className="muted">Lecture des règles actives et feedback manager depuis Google Sheets.</p>
-          </div>
-          <Link className="button ghost" href="/dashboard">
-            Retour dashboard
+    <AppShell user={user} product="Règles" rail={rail}>
+      <PageHeader
+        eyebrow="Scoring"
+        title="Règles et apprentissage"
+        sub="Lecture des règles actives et feedback manager depuis Google Sheets."
+        actions={
+          <Link className="btn btn--ghost" href="/dashboard">
+            ← Pipeline
           </Link>
-        </section>
+        }
+      />
 
-        {error ? <div className="alert" style={{ marginTop: 16 }}>{error}</div> : null}
+      {error ? <div className="alert" style={{ marginBottom: 16 }}>{error}</div> : null}
 
-        <section className="card section" style={{ marginTop: 16 }}>
-          <h2>Règles scoring</h2>
-          <table className="table">
+      <section className="card section">
+        <h2>Règles scoring</h2>
+        <p className="muted">{rules.length} règle(s) actives</p>
+        <div className="pipe-wrap" style={{ marginTop: 12 }}>
+          <table className="pipe">
             <thead>
               <tr>
                 <th>Type</th>
                 <th>Keywords</th>
-                <th>Score</th>
+                <th className="r">Score</th>
                 <th>Manager</th>
                 <th>Source / raison</th>
               </tr>
@@ -48,18 +68,28 @@ export default async function RulesPage() {
                 <tr key={`${rule.type}-${index}`}>
                   <td>{rule.type}</td>
                   <td>{rule.keywords}</td>
-                  <td>{rule.score}</td>
-                  <td>{rule.manager}</td>
+                  <td className="num">{rule.score}</td>
+                  <td className="mgr">{rule.manager}</td>
                   <td>{rule.reason}</td>
                 </tr>
               ))}
+              {rules.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="muted">
+                    Aucune règle disponible.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
-        </section>
+        </div>
+      </section>
 
-        <section className="card section" style={{ marginTop: 16 }}>
-          <h2>Feedback manager</h2>
-          <table className="table">
+      <section className="card section" style={{ marginTop: 16 }}>
+        <h2>Feedback manager</h2>
+        <p className="muted">{feedback.length} retour(s) enregistré(s)</p>
+        <div className="pipe-wrap" style={{ marginTop: 12 }}>
+          <table className="pipe">
             <thead>
               <tr>
                 <th>AO</th>
@@ -72,17 +102,26 @@ export default async function RulesPage() {
             <tbody>
               {feedback.slice(0, 80).map((row, index) => (
                 <tr key={`${row.ao_num}-${index}`}>
-                  <td>{row.ao_num}</td>
+                  <td>
+                    <span className="ao-num">{row.ao_num}</span>
+                  </td>
                   <td>{row.decision_ia}</td>
                   <td>{row.decision_manager}</td>
                   <td>{row.motif_manager}</td>
                   <td>{row.statut}</td>
                 </tr>
               ))}
+              {feedback.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="muted">
+                    Aucun feedback enregistré.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
-        </section>
-      </div>
-    </main>
+        </div>
+      </section>
+    </AppShell>
   );
 }

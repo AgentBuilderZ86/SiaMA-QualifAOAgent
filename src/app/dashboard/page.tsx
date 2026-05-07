@@ -1,109 +1,138 @@
+import Link from "next/link";
 import { getDashboardData } from "@/lib/ao";
 import { requireUser } from "@/lib/auth";
 import { logoutAction, refreshAoSourcesAction } from "./actions";
-import Link from "next/link";
-
-function statusClass(status: string) {
-  return status.toLowerCase().replace(/\s+/g, "-");
-}
+import { AppShell, PageHeader, Pill, RecoBadge } from "@/components/shell";
+import { buildDashboardRail } from "./dashboardRail";
 
 type DashboardAo = Awaited<ReturnType<typeof getDashboardData>>["records"][number];
 const PIPELINE_STATUSES = ["A QUALIFIER", "GO", "BO", "P2P", "PS", "PITCH", "PW", "PL", "NO GO"] as const;
 
-function AoTable({ records, emptyLabel }: { records: DashboardAo[]; emptyLabel: string }) {
+function delayClass(jours: number | null | undefined): string {
+  if (typeof jours !== "number") return "";
+  if (jours <= 5) return " crit";
+  if (jours <= 10) return " warn";
+  return "";
+}
+
+function delayLabel(jours: number | null | undefined): string {
+  if (typeof jours !== "number") return "NC";
+  return `J+${jours}`;
+}
+
+function managerInitials(name: string): string {
+  if (!name) return "··";
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function formatBudget(value: string | undefined): string {
+  if (!value) return "—";
+  return value;
+}
+
+function PipelineTable({ records, emptyLabel }: { records: DashboardAo[]; emptyLabel: string }) {
   return (
-    <table className="table">
-      <thead>
-        <tr>
-          <th>N° AO</th>
-          <th>Client</th>
-          <th>Sujet</th>
-          <th>Manager</th>
-          <th>Statut</th>
-          <th>Budget</th>
-          <th>Source</th>
-        </tr>
-      </thead>
-      <tbody>
-        {records.map((ao, index) => (
-          <tr key={`${ao.sourceTab}-${ao.aoNum}-${index}`}>
-            <td>
-              <Link href={`/ao/${encodeURIComponent(ao.aoNum)}`}>{ao.displayAoNum}</Link>
-            </td>
-            <td>{ao.client}</td>
-            <td>{ao.sujet}</td>
-            <td>{ao.manager}</td>
-            <td>
-              <span className={`badge ${statusClass(ao.statut)}`}>{ao.statut}</span>
-            </td>
-            <td>{ao.budget}</td>
-            <td>
-              {ao.sourceUrl ? (
-                <a href={ao.sourceUrl} target="_blank" rel="noreferrer">
-                  {ao.sourceName || ao.sourceTab}
-                </a>
-              ) : (
-                ao.sourceName || ao.sourceTab
-              )}
-            </td>
-          </tr>
-        ))}
-        {records.length === 0 ? (
+    <div className="pipe-wrap">
+      <table className="pipe">
+        <thead>
           <tr>
-            <td colSpan={7} className="muted">
-              {emptyLabel}
-            </td>
+            <th>Statut</th>
+            <th>N° AO · Sujet</th>
+            <th>Manager</th>
+            <th>Reco</th>
+            <th className="r">Budget</th>
+            <th className="r">Délai</th>
           </tr>
-        ) : null}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {records.map((ao, index) => (
+            <tr key={`${ao.sourceTab}-${ao.aoNum}-${index}`}>
+              <td>
+                <Pill status={ao.statut} />
+              </td>
+              <td>
+                <Link href={`/ao/${encodeURIComponent(ao.aoNum)}`}>
+                  <div className="sujet">{ao.sujet || ao.client}</div>
+                  <div className="client">
+                    {ao.client} · <span className="ao-num">{ao.displayAoNum}</span>
+                  </div>
+                </Link>
+              </td>
+              <td>
+                <div className="mgr-cell">
+                  <span className="sw">{managerInitials(ao.manager)}</span>
+                  <span className="mgr">{ao.manager || "—"}</span>
+                </div>
+              </td>
+              <td>
+                <RecoBadge recommendation={ao.decisionIa} showGlyph={false} />
+              </td>
+              <td className="num">{formatBudget(ao.budget)}</td>
+              <td className="num">
+                <span className={`delay${delayClass(ao.delaiJours)}`}>{delayLabel(ao.delaiJours)}</span>
+              </td>
+            </tr>
+          ))}
+          {records.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="muted">
+                {emptyLabel}
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-function PipelineBoard({ records }: { records: DashboardAo[] }) {
+function PipelineKanban({ records }: { records: DashboardAo[] }) {
   return (
-    <section className="card section" style={{ marginTop: 16 }}>
-      <div className="section-header">
-        <div>
-          <p className="eyebrow">Pipeline</p>
-          <h2>Opportunités par phase</h2>
-        </div>
-      </div>
-      <div className="pipeline-board">
-        {PIPELINE_STATUSES.map((status) => {
-          const items = records.filter((ao) => ao.statut === status);
-          return (
-            <div className="pipeline-column" key={status}>
-              <div className="pipeline-column-header">
-                <span className={`badge ${status.toLowerCase().replace(/\s+/g, "-")}`}>{status}</span>
-                <strong>{items.length}</strong>
-              </div>
-              {items
-                .sort((a, b) => (a.delaiJours ?? 999) - (b.delaiJours ?? 999))
-                .slice(0, 5)
-                .map((ao) => (
-                  <Link className="pipeline-card" href={`/ao/${encodeURIComponent(ao.aoNum)}`} key={`${ao.sourceTab}-${ao.aoNum}`}>
-                    <strong>{ao.client}</strong>
-                    <span>{ao.sujet}</span>
-                    <small>{ao.delaiJours !== null ? `J+${ao.delaiJours}` : "Délai NC"} · {ao.sourceKind === "google-sheet" ? "Google" : "Scrappé"}</small>
-                  </Link>
-                ))}
-              {items.length === 0 ? <p className="muted">Aucune opportunité</p> : null}
+    <div className="pipeline-board">
+      {PIPELINE_STATUSES.map((status) => {
+        const items = records.filter((ao) => ao.statut === status);
+        return (
+          <div className="pipeline-column" key={status}>
+            <div className="pipeline-column-header">
+              <Pill status={status} />
+              <strong>{items.length}</strong>
             </div>
-          );
-        })}
-      </div>
-    </section>
+            {items
+              .sort((a, b) => (a.delaiJours ?? 999) - (b.delaiJours ?? 999))
+              .slice(0, 5)
+              .map((ao) => (
+                <Link
+                  className="pipeline-card"
+                  href={`/ao/${encodeURIComponent(ao.aoNum)}`}
+                  key={`${ao.sourceTab}-${ao.aoNum}`}
+                >
+                  <strong>{ao.client}</strong>
+                  <span>{ao.sujet}</span>
+                  <small>
+                    {ao.delaiJours !== null ? `J+${ao.delaiJours}` : "Délai NC"} ·{" "}
+                    {ao.sourceKind === "google-sheet" ? "Google" : "Scrappé"}
+                  </small>
+                </Link>
+              ))}
+            {items.length === 0 ? <p className="muted t-meta">Aucune opportunité</p> : null}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
 export default async function DashboardPage() {
   const user = await requireUser();
   const data = await getDashboardData();
+
   const generatedAt = new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(data.generatedAt));
+
   const sourceLabel =
     data.sourceMode === "hybrid"
       ? "sources publiques et Google Sheets"
@@ -113,106 +142,185 @@ export default async function DashboardPage() {
           ? "Google Sheets"
           : "aucune source configurée";
 
+  const statusCounts = {
+    aq: data.totals.aQualifier,
+    bo: data.records.filter((ao) => ao.statut === "BO").length,
+    p2p: data.records.filter((ao) => ao.statut === "P2P").length,
+    ps: data.records.filter((ao) => ao.statut === "PS").length,
+    pitch: data.records.filter((ao) => ao.statut === "PITCH").length,
+    pw: data.totals.won,
+    pl: data.totals.lost
+  };
+
+  const recoCounts = {
+    go: data.records.filter((ao) => (ao.decisionIa || "").toUpperCase() === "GO").length,
+    watch: data.records.filter((ao) => {
+      const v = (ao.decisionIa || "").toUpperCase();
+      return v && v !== "GO" && v !== "NO GO";
+    }).length,
+    nogo: data.records.filter((ao) => (ao.decisionIa || "").toUpperCase() === "NO GO").length
+  };
+
+  const rail = buildDashboardRail(data, "pipeline");
+
   return (
-    <main className="page">
-      <div className="shell">
-        <section className="card hero">
-          <div>
-            <p className="eyebrow">Dashboard AO</p>
-            <h1>Qualification et pipeline</h1>
-            <p className="muted">
-              Données calculées depuis {sourceLabel}. Dernière lecture : {generatedAt}.
-            </p>
-          </div>
-          <div>
-            <p className="muted">{user}</p>
-            <form action={refreshAoSourcesAction} style={{ display: "inline", marginRight: 8 }}>
-              <button className="button" type="submit">
-                Rafraîchir sources AO
+    <AppShell user={user} product="AO Agent" rail={rail}>
+      <PageHeader
+        eyebrow="Pipeline AO · Maroc"
+        title="Pipeline AO"
+        sub={`${data.totals.all} AOs suivis · ${recoCounts.go} GO · ${recoCounts.watch} WATCH · ${recoCounts.nogo} NO GO · sync ${generatedAt}`}
+        actions={
+          <>
+            <form action={refreshAoSourcesAction}>
+              <button className="btn btn--ghost" type="submit">
+                ↻ Rafraîchir sources
               </button>
             </form>
-            <Link className="button ghost" href="/rules" style={{ marginRight: 8 }}>
-              Règles
-            </Link>
-            <Link className="button ghost" href="/audit" style={{ marginRight: 8 }}>
-              Audit
-            </Link>
-            <Link className="button ghost" href="/settings" style={{ marginRight: 8 }}>
+            <Link className="btn btn--ghost" href="/settings">
               Référentiels
             </Link>
-            <form action={logoutAction} style={{ display: "inline" }}>
-              <button className="button ghost" type="submit">
+            <Link className="btn btn--ghost" href="/rules">
+              Règles
+            </Link>
+            <Link className="btn btn--ghost" href="/audit">
+              Audit
+            </Link>
+            <form action={logoutAction}>
+              <button className="btn btn--ghost" type="submit">
                 Déconnexion
               </button>
             </form>
+          </>
+        }
+      />
+
+      {!data.configured ? (
+        <section className="card section">
+          <h2>Aucune source AO chargée</h2>
+          <p className="muted">
+            Lancez un rafraîchissement des sources publiques ou configurez Google Sheets pour afficher les AOs suivis (
+            {sourceLabel}).
+          </p>
+          {data.missingConfig.length ? (
+            <div className="alert" style={{ marginTop: 12 }}>
+              Variables Google manquantes : {data.missingConfig.join(", ")}
+            </div>
+          ) : null}
+        </section>
+      ) : data.loadError ? (
+        <section className="card section">
+          <h2>Connexion Google à finaliser</h2>
+          <p className="muted">L'ID du Google Sheet est configuré, mais le serveur n'a pas encore de droits API pour le lire.</p>
+          <div className="alert" style={{ marginTop: 12 }}>
+            {data.loadError}
           </div>
         </section>
+      ) : (
+        <>
+          {/* KPI strip dark */}
+          <div className="kpi-strip">
+            <div className="kpi">
+              <div className="lbl">⏳ A qualifier</div>
+              <div className="num">{statusCounts.aq}</div>
+              <div className="delta">{data.totals.urgent} urgents</div>
+            </div>
+            <div className="kpi active">
+              <div className="lbl">🔵 BO</div>
+              <div className="num">{statusCounts.bo}</div>
+              <div className="delta">Pipeline qualifié</div>
+            </div>
+            <div className="kpi">
+              <div className="lbl">📝 P2P</div>
+              <div className="num">{statusCounts.p2p}</div>
+              <div className="delta">{recoCounts.watch} WATCH</div>
+            </div>
+            <div className="kpi">
+              <div className="lbl">📤 PS</div>
+              <div className="num">{statusCounts.ps}</div>
+              <div className="delta">en attente client</div>
+            </div>
+            <div className="kpi">
+              <div className="lbl">🎤 PITCH</div>
+              <div className="num">{statusCounts.pitch}</div>
+              <div className="delta">soutenances</div>
+            </div>
+            <div className="kpi">
+              <div className="lbl">✅ PW</div>
+              <div className="num">{statusCounts.pw}</div>
+              <div className="delta">remportés</div>
+            </div>
+            <div className="kpi">
+              <div className="lbl">❌ PL</div>
+              <div className="num">{statusCounts.pl}</div>
+              <div className="delta">perdus</div>
+            </div>
+          </div>
 
-        {!data.configured ? (
-          <section className="card section" style={{ marginTop: 20 }}>
-            <h2>Aucune source AO chargée</h2>
-            <p className="muted">
-              Lancez un rafraîchissement des sources publiques ou configurez Google Sheets pour afficher les AO suivis.
-            </p>
-            {data.missingConfig.length ? <div className="alert">Variables Google manquantes : {data.missingConfig.join(", ")}</div> : null}
-          </section>
-        ) : data.loadError ? (
-          <section className="card section" style={{ marginTop: 20 }}>
-            <h2>Connexion Google à finaliser</h2>
-            <p className="muted">
-              L'ID du Google Sheet est configuré, mais le serveur local n'a pas encore de droits API pour le lire.
-            </p>
-            <div className="alert">{data.loadError}</div>
-          </section>
-        ) : (
-          <>
-            <section className="grid stats">
-              <div className="card stat">
-                <strong>{data.totals.all}</strong>
-                <span>Total AOs suivis</span>
-              </div>
-              <div className="card stat">
-                <strong>{data.totals.go}</strong>
-                <span>GO / En cours</span>
-              </div>
-              <div className="card stat">
-                <strong>{data.totals.activePipeline}</strong>
-                <span>Pipeline actif</span>
-              </div>
-              <div className="card stat">
-                <strong>{data.totals.urgent}</strong>
-                <span>Délais ≤ 7 jours</span>
-              </div>
-            </section>
+          {/* Filter bar */}
+          <div className="filter-bar">
+            <span className="fchip on">
+              🔵 BO + P2P <span className="x">×</span>
+            </span>
+            <span className="fchip">＋ Manager</span>
+            <span className="fchip">＋ Client</span>
+            <span className="fchip">＋ Délai</span>
+            <span className="fchip">＋ Recommandation</span>
+            <span className="spacer" />
+            <span className="view">
+              {data.recent.length} résultats · trié par délai croissant
+            </span>
+          </div>
 
-            <section className="grid two-col">
-              <div className="card section">
-                <h2>AOs urgents</h2>
-                <table className="table">
+          {/* Pipeline principal */}
+          <section className="card section" style={{ padding: 0, marginBottom: 16 }}>
+            <div style={{ padding: "16px 18px 0" }}>
+              <p className="eyebrow">Pipeline opérationnel</p>
+              <h2>AOs actifs · les 20 plus récents</h2>
+            </div>
+            <div style={{ padding: "12px 18px 18px" }}>
+              <PipelineTable
+                records={data.recent.slice(0, 20)}
+                emptyLabel="Aucun AO chargé."
+              />
+            </div>
+          </section>
+
+          {/* AOs urgents + charge par manager */}
+          <section className="grid two-col">
+            <div className="card section">
+              <p className="eyebrow">Vigilance délai</p>
+              <h2>AOs urgents (≤ 7 jours)</h2>
+              <div className="pipe-wrap" style={{ marginTop: 12 }}>
+                <table className="pipe">
                   <thead>
                     <tr>
-                      <th>N° AO</th>
-                      <th>Client</th>
-                      <th>Sujet</th>
-                      <th>Délai</th>
+                      <th>Statut</th>
+                      <th>N° AO · Sujet</th>
+                      <th className="r">Délai</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.urgent.map((ao, index) => (
-                      <tr key={`${ao.sourceTab}-${ao.aoNum}-${index}`}>
+                      <tr key={`urgent-${ao.aoNum}-${index}`}>
                         <td>
-                          <Link href={`/ao/${encodeURIComponent(ao.aoNum)}`}>{ao.displayAoNum}</Link>
+                          <Pill status={ao.statut} />
                         </td>
-                        <td>{ao.client}</td>
-                        <td>{ao.sujet}</td>
                         <td>
-                          <span className="badge urgent">J+{ao.delaiJours}</span>
+                          <Link href={`/ao/${encodeURIComponent(ao.aoNum)}`}>
+                            <div className="sujet">{ao.sujet || ao.client}</div>
+                            <div className="client">
+                              {ao.client} · <span className="ao-num">{ao.displayAoNum}</span>
+                            </div>
+                          </Link>
+                        </td>
+                        <td className="num">
+                          <span className={`delay${delayClass(ao.delaiJours)}`}>{delayLabel(ao.delaiJours)}</span>
                         </td>
                       </tr>
                     ))}
                     {data.urgent.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="muted">
+                        <td colSpan={3} className="muted">
                           Aucun délai critique dans les données chargées.
                         </td>
                       </tr>
@@ -220,56 +328,83 @@ export default async function DashboardPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
 
-              <div className="card section">
-                <h2>Charge par manager</h2>
-                <table className="table">
+            <div className="card section">
+              <p className="eyebrow">Charge équipe</p>
+              <h2>Charge par manager</h2>
+              <div className="pipe-wrap" style={{ marginTop: 12 }}>
+                <table className="pipe">
                   <thead>
                     <tr>
                       <th>Manager</th>
-                      <th>Total</th>
-                      <th>Urgent</th>
+                      <th className="r">Total</th>
+                      <th className="r">GO</th>
+                      <th className="r">Urgent</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.byManager.map((item) => (
                       <tr key={item.manager}>
-                        <td>{item.manager}</td>
-                        <td>{item.total}</td>
-                        <td>{item.urgent}</td>
+                        <td>
+                          <div className="mgr-cell">
+                            <span className="sw">{managerInitials(item.manager)}</span>
+                            <span className="mgr">{item.manager || "—"}</span>
+                          </div>
+                        </td>
+                        <td className="num">{item.total}</td>
+                        <td className="num">{item.go}</td>
+                        <td className="num">{item.urgent}</td>
                       </tr>
                     ))}
+                    {data.byManager.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="muted">
+                          Aucun manager renseigné.
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               </div>
-            </section>
+            </div>
+          </section>
 
-            <PipelineBoard records={data.records} />
+          {/* Vue par phase (kanban replié) */}
+          <details className="collapsible-panel" style={{ marginTop: 16 }}>
+            <summary>Vue par phase · pipeline kanban</summary>
+            <div style={{ marginTop: 14 }}>
+              <PipelineKanban records={data.records} />
+            </div>
+          </details>
 
-            <section className="card section" style={{ marginTop: 16 }}>
-              <h2>AO fichier Google Sheets ({data.googleSheetRecords.length})</h2>
-              <p className="muted">Source interne prioritaire : si un AO scrappé correspond à cette liste, il est retiré du groupe scrappé.</p>
-              <AoTable records={data.googleSheetRecords.slice(0, 50)} emptyLabel="Aucun AO Google Sheets chargé." />
-            </section>
+          {/* Source breakdown */}
+          <details className="collapsible-panel" style={{ marginTop: 16 }}>
+            <summary>Sources · {data.googleSheetRecords.length} Google Sheets · {data.scrapedRecords.length} scrappés</summary>
+            <div style={{ marginTop: 14 }}>
+              <p className="t-meta">Source interne prioritaire : si un AO scrappé correspond à cette liste, il est retiré du groupe scrappé.</p>
+              <PipelineTable
+                records={data.googleSheetRecords.slice(0, 30)}
+                emptyLabel="Aucun AO Google Sheets chargé."
+              />
+              <h3 style={{ marginTop: 16 }}>AO scrappés dédoublonnés</h3>
+              <PipelineTable
+                records={data.scrapedRecords.slice(0, 30)}
+                emptyLabel="Aucun AO scrappé distinct du fichier Google Sheets."
+              />
+            </div>
+          </details>
 
-            <section className="card section" style={{ marginTop: 16 }}>
-              <h2>AO scrappés dédoublonnés ({data.scrapedRecords.length})</h2>
-              <p className="muted">Avis publics collectés depuis les sources natives, hors doublons déjà présents dans le fichier Google Sheets.</p>
-              <AoTable records={data.scrapedRecords.slice(0, 50)} emptyLabel="Aucun AO scrappé distinct du fichier Google Sheets." />
-            </section>
-
-            <section className="card section" style={{ marginTop: 16 }}>
-              <h2>Vue combinée dédoublonnée récente</h2>
-              <AoTable records={data.recent} emptyLabel="Aucun AO chargé." />
-            </section>
-            {data.sourceReport.length ? (
-              <section className="card section" style={{ marginTop: 16 }}>
-                <h2>Journal de collecte</h2>
-                <table className="table">
+          {/* Journal de collecte */}
+          {data.sourceReport.length ? (
+            <details className="collapsible-panel" style={{ marginTop: 16 }}>
+              <summary>Journal de collecte · {data.sourceReport.length} sources</summary>
+              <div className="pipe-wrap" style={{ marginTop: 14 }}>
+                <table className="pipe">
                   <thead>
                     <tr>
                       <th>Source</th>
-                      <th>Avis retenus</th>
+                      <th className="r">Avis retenus</th>
                       <th>Dernière collecte</th>
                       <th>Alertes</th>
                     </tr>
@@ -278,18 +413,24 @@ export default async function DashboardPage() {
                     {data.sourceReport.map((item) => (
                       <tr key={`${item.sourceName}-${item.collectedAt}`}>
                         <td>{item.sourceName}</td>
-                        <td>{item.count}</td>
-                        <td>{item.collectedAt ? new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.collectedAt)) : "NC"}</td>
+                        <td className="num">{item.count}</td>
+                        <td>
+                          {item.collectedAt
+                            ? new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(
+                                new Date(item.collectedAt)
+                              )
+                            : "NC"}
+                        </td>
                         <td>{item.errors.length ? item.errors.join(" | ") : "Aucune"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </section>
-            ) : null}
-          </>
-        )}
-      </div>
-    </main>
+              </div>
+            </details>
+          ) : null}
+        </>
+      )}
+    </AppShell>
   );
 }

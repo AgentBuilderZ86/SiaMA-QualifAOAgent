@@ -6,6 +6,7 @@ import { FinancialSimulationView, parseJsonField, ProposalSectionView } from "./
 import { QualificationIntelligenceView } from "./qualificationView";
 import { DecisionPanel } from "./decisionPanel";
 import { WorkflowFlow } from "./workflow";
+import { AppShell, PageHeader, Pill, type SideRailGroup } from "@/components/shell";
 
 function field(label: string, value: string | number | null | undefined) {
   return (
@@ -16,8 +17,15 @@ function field(label: string, value: string | number | null | undefined) {
   );
 }
 
+function delayClass(jours: number | null | undefined): string {
+  if (typeof jours !== "number") return "";
+  if (jours <= 5) return " crit";
+  if (jours <= 10) return " warn";
+  return "";
+}
+
 export default async function AoDetailPage({ params }: { params: Promise<{ aoNum: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const { aoNum } = await params;
   const detail = await getAoDetail(decodeURIComponent(aoNum));
   if (!detail) notFound();
@@ -29,154 +37,196 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
   const simulation = parseJsonField(pipeline?.["Simulation financière"]);
   const proposal = parseJsonField(pipeline?.["Sections propale"]);
 
+  const rail: SideRailGroup[] = [
+    {
+      title: "AO en cours",
+      items: [
+        { label: "📋 Vue d'ensemble", href: `/ao/${aoHref}`, active: true },
+        { label: "📑 Qualification", href: `/ao/${aoHref}/qualification` },
+        { label: "💰 Simulation & propale", href: `/ao/${aoHref}/proposal` },
+        { label: "🎤 Pitch", href: `/ao/${aoHref}/pitch` },
+        { label: "✅ Clôture", href: `/ao/${aoHref}/closure` }
+      ]
+    },
+    {
+      title: "Navigation",
+      items: [
+        { label: "📊 Pipeline", href: "/dashboard" },
+        { label: "💬 SiaGPT", href: "/chat" },
+        { label: "📋 Audit", href: "/audit" }
+      ]
+    }
+  ];
+
   return (
-    <main className="page">
-      <div className="shell">
-        <section className="card hero">
-          <div>
-            <p className="eyebrow">AO {ao.displayAoNum}</p>
-            <h1>{ao.client}</h1>
-            <p className="muted">{ao.sujet}</p>
+    <AppShell user={user} product="AO Agent" rail={rail}>
+      <PageHeader
+        eyebrow={<>AO <span className="ao-num">{ao.displayAoNum}</span></>}
+        title={ao.client}
+        sub={ao.sujet}
+        actions={
+          <>
+            <Link className="btn btn--ghost" href="/dashboard">
+              ← Pipeline
+            </Link>
+            <Link className="btn btn--accent" href={`/ao/${aoHref}/qualification`}>
+              Ouvrir la qualification
+            </Link>
+          </>
+        }
+      />
+
+      {/* KPI strip 4 colonnes */}
+      <div className="kpi-strip">
+        <div className="kpi active">
+          <div className="lbl">Statut</div>
+          <div className="num" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Pill status={ao.statut} />
           </div>
-          <Link className="button ghost" href="/dashboard">
-            Retour dashboard
-          </Link>
-        </section>
-
-        <section className="grid stats">
-          <div className="card stat">
-            <strong>{ao.statut}</strong>
-            <span>Statut courant</span>
+          <div className="delta">{ao.decisionIa ? `Reco : ${ao.decisionIa}` : "Reco à venir"}</div>
+        </div>
+        <div className="kpi">
+          <div className="lbl">Délai</div>
+          <div className="num">
+            <span className={`delay${delayClass(ao.delaiJours)}`} style={{ fontSize: 22, padding: "0 12px", height: 30 }}>
+              {ao.delaiJours !== null ? `J+${ao.delaiJours}` : "NC"}
+            </span>
           </div>
-          <div className="card stat">
-            <strong>{ao.delaiJours ?? "NC"}</strong>
-            <span>Délai jours</span>
-          </div>
-          <div className="card stat">
-            <strong>{ao.budget}</strong>
-            <span>Budget</span>
-          </div>
-          <div className="card stat">
-            <strong>{ao.manager}</strong>
-            <span>Manager</span>
-          </div>
-        </section>
+          <div className="delta">{ao.dateLimite || "Date limite NC"}</div>
+        </div>
+        <div className="kpi">
+          <div className="lbl">Budget</div>
+          <div className="num" style={{ fontFamily: "var(--font-mono)" }}>{ao.budget || "—"}</div>
+          <div className="delta">{ao.country || ao.buyer || "Source : " + (ao.sourceTab || "NC")}</div>
+        </div>
+        <div className="kpi">
+          <div className="lbl">Manager</div>
+          <div className="num" style={{ fontSize: 20, letterSpacing: "0.04em" }}>{ao.manager || "Non assigné"}</div>
+          <div className="delta">Source : {ao.sourceTab || "NC"}</div>
+        </div>
+      </div>
 
-        <DecisionPanel ao={ao} qualification={qualification} />
+      <DecisionPanel ao={ao} qualification={qualification} />
 
-        <section className="grid two-col" style={{ marginTop: 16 }}>
-          <WorkflowFlow ao={ao} enabled={workflowAvailable} />
-          <div className="card section">
-            <div className="section-header">
-              <div>
-                <p className="eyebrow">Actions</p>
-                <h2>Prochaines étapes</h2>
-              </div>
-            </div>
-            <div className="actions-grid" style={{ marginBottom: 16 }}>
-              <Link className="button ghost" href={`/ao/${aoHref}/qualification`}>
-                Qualification
-              </Link>
-              <Link className="button ghost" href={`/ao/${aoHref}/proposal`}>
-                Simulation & propale
-              </Link>
-              <Link className="button ghost" href={`/ao/${aoHref}/pitch`}>
-                Pitch
-              </Link>
-              <Link className="button ghost" href={`/ao/${aoHref}/closure`}>
-                Clôture
-              </Link>
-            </div>
-            <div className="info-grid">
-              {field("N° AO", ao.displayAoNum)}
-              {field("Date limite", ao.dateLimite)}
-              {field("Source", ao.sourceTab)}
-            </div>
-          </div>
-        </section>
-
-        <section className="qualif-shell" style={{ marginTop: 16 }}>
-          {qualification ? (
-            <>
-              <div className="qualif-hero">
-                <div>
-                  <p className="eyebrow inverse">Fiche qualification</p>
-                  <h2>{ao.client} - {ao.sujet}</h2>
-                  <p>{qualification.documentName || "Document non renseigné"}</p>
-                </div>
-                <div className="qualif-status">
-                  <strong>{ao.statut}</strong>
-                  <span>{qualification.extractionStatus || "Document analysé"}</span>
-                </div>
-              </div>
-
-              <div style={{ padding: 22 }}>
-                <QualificationIntelligenceView
-                  fiche={qualification}
-                  ao={ao}
-                  deckHref={`/ao/${aoHref}/qualification/deck`}
-                  htmlHref={`/ao/${aoHref}/qualification/fiche.html`}
-                />
-              </div>
-
-              <div className="source-row">
-                {(qualification.sources || []).map((source: string) => (
-                  <span className="source-chip" key={source}>{source}</span>
-                ))}
-              </div>
-
-              <details className="extract-panel">
-                <summary>Voir l’extrait documentaire analysé</summary>
-                <pre className="pre">{qualification.documentExtract}</pre>
-              </details>
-            </>
-          ) : (
-            <div className="card section">
-              <h2>Qualification et livrables</h2>
-              <p className="muted">Aucune fiche enregistrée.</p>
-            </div>
-          )}
-        </section>
-
-        <section className="card section compact-section" style={{ marginTop: 16 }}>
+      <section className="grid two-col" style={{ marginTop: 16 }}>
+        <WorkflowFlow ao={ao} enabled={workflowAvailable} />
+        <div className="card section">
           <div className="section-header">
             <div>
-              <p className="eyebrow">P2P</p>
-              <h2>Simulation & propale</h2>
+              <p className="eyebrow">Actions</p>
+              <h2>Prochaines étapes</h2>
             </div>
-            <Link className="button ghost" href={`/ao/${aoHref}/proposal`}>
-              Ouvrir l’atelier propale
+          </div>
+          <div className="actions-grid" style={{ marginBottom: 16 }}>
+            <Link className="btn btn--ghost" href={`/ao/${aoHref}/qualification`}>
+              📑 Qualification
+            </Link>
+            <Link className="btn btn--ghost" href={`/ao/${aoHref}/proposal`}>
+              💰 Simulation & propale
+            </Link>
+            <Link className="btn btn--ghost" href={`/ao/${aoHref}/pitch`}>
+              🎤 Pitch
+            </Link>
+            <Link className="btn btn--ghost" href={`/ao/${aoHref}/closure`}>
+              ✅ Clôture
             </Link>
           </div>
-          <FinancialSimulationView simulation={simulation} />
-          <details className="collapsible-panel" style={{ marginTop: 12 }}>
-            <summary>Section propale PowerPoint</summary>
-            <ProposalSectionView proposal={proposal} />
-          </details>
-        </section>
+          <div className="info-grid">
+            {field("N° AO", ao.displayAoNum)}
+            {field("Date limite", ao.dateLimite)}
+            {field("Source", ao.sourceTab)}
+          </div>
+        </div>
+      </section>
 
-        <details className="card section collapsible-panel" style={{ marginTop: 16 }}>
-          <summary>Sources et traçabilité</summary>
-          <div className="info-grid" style={{ marginTop: 16 }}>
-            {field("Nom source", ao.sourceName || ao.sourceTab)}
-            {field("Type source", ao.sourceKind)}
-            {field("Identifiant source", ao.sourceNoticeId || ao.displayAoNum)}
-            {ao.sourceUrl ? (
-              <div className="info-item">
-                <span>URL source</span>
-                <a href={ao.sourceUrl} target="_blank" rel="noreferrer">
-                  {ao.sourceUrl}
-                </a>
+      <section className="qualif-shell" style={{ marginTop: 16 }}>
+        {qualification ? (
+          <>
+            <div className="qualif-hero">
+              <div>
+                <p className="eyebrow inverse">Fiche qualification</p>
+                <h2>{ao.client} — {ao.sujet}</h2>
+                <p>{qualification.documentName || "Document non renseigné"}</p>
+              </div>
+              <div className="qualif-status">
+                <strong>{ao.statut}</strong>
+                <span>{qualification.extractionStatus || "Document analysé"}</span>
+              </div>
+            </div>
+
+            <div style={{ padding: 22 }}>
+              <QualificationIntelligenceView
+                fiche={qualification}
+                ao={ao}
+                deckHref={`/ao/${aoHref}/qualification/deck`}
+                htmlHref={`/ao/${aoHref}/qualification/fiche.html`}
+              />
+            </div>
+
+            {(qualification.sources || []).length ? (
+              <div className="source-row">
+                {(qualification.sources || []).map((source: string) => (
+                  <span className="source-chip" key={source}>
+                    {source}
+                  </span>
+                ))}
               </div>
             ) : null}
-            {field("Pays", ao.country)}
-            {field("Acheteur", ao.buyer)}
-            {field("Date publication", ao.publishedAt)}
-            {field("Date collecte", ao.collectedAt)}
-            {field("Qualité", ao.dataQuality ? `${ao.dataQuality.completenessScore}%` : "")}
+
+            <details className="extract-panel">
+              <summary>Voir l'extrait documentaire analysé</summary>
+              <pre className="pre">{qualification.documentExtract}</pre>
+            </details>
+          </>
+        ) : (
+          <div className="card section">
+            <h2>Qualification et livrables</h2>
+            <p className="muted">Aucune fiche enregistrée. Lancez la qualification depuis l'onglet dédié.</p>
+            <Link className="btn btn--accent" href={`/ao/${aoHref}/qualification`} style={{ marginTop: 12 }}>
+              Démarrer la qualification
+            </Link>
           </div>
+        )}
+      </section>
+
+      <section className="card section compact-section" style={{ marginTop: 16 }}>
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">P2P</p>
+            <h2>Simulation & propale</h2>
+          </div>
+          <Link className="btn btn--ghost" href={`/ao/${aoHref}/proposal`}>
+            Ouvrir l'atelier propale
+          </Link>
+        </div>
+        <FinancialSimulationView simulation={simulation} />
+        <details className="collapsible-panel" style={{ marginTop: 12 }}>
+          <summary>Section propale PowerPoint</summary>
+          <ProposalSectionView proposal={proposal} />
         </details>
-      </div>
-    </main>
+      </section>
+
+      <details className="card section collapsible-panel" style={{ marginTop: 16 }}>
+        <summary>Sources et traçabilité</summary>
+        <div className="info-grid" style={{ marginTop: 16 }}>
+          {field("Nom source", ao.sourceName || ao.sourceTab)}
+          {field("Type source", ao.sourceKind)}
+          {field("Identifiant source", ao.sourceNoticeId || ao.displayAoNum)}
+          {ao.sourceUrl ? (
+            <div className="info-item">
+              <span>URL source</span>
+              <a href={ao.sourceUrl} target="_blank" rel="noreferrer">
+                {ao.sourceUrl}
+              </a>
+            </div>
+          ) : null}
+          {field("Pays", ao.country)}
+          {field("Acheteur", ao.buyer)}
+          {field("Date publication", ao.publishedAt)}
+          {field("Date collecte", ao.collectedAt)}
+          {field("Qualité", ao.dataQuality ? `${ao.dataQuality.completenessScore}%` : "")}
+        </div>
+      </details>
+    </AppShell>
   );
 }

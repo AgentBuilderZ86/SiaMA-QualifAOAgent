@@ -18,12 +18,14 @@ Module._resolveFilename = function patched(request, parent, ...rest) {
 
 const testModule = require(path.join(tmpRoot, "lib", "qualification", "intelligence.test.js"));
 
-try {
-  testModule.runQualificationIntelligenceSelfTest();
-  console.log("[OK] Qualification intelligence self-test V9");
-  process.exit(0);
-} catch (error) {
-  console.error("[FAIL]", error && error.message ? error.message : error);
-  if (error && error.stack) console.error(error.stack);
-  process.exit(1);
-}
+(async () => {
+  try {
+    await testModule.runQualificationIntelligenceSelfTest();
+    console.log("[OK] Qualification intelligence self-test V9");
+    process.exit(0);
+  } catch (error) {
+    console.error("[FAIL]", error && error.message ? error.message : error);
+    if (error && error.stack) console.error(error.stack);
+    process.exit(1);
+  }
+})();

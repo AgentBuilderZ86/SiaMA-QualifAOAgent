@@ -24,6 +24,7 @@ import type { ReferentielItem } from "@/lib/aoTypes";
 import type { PatternScoreResult } from "@/lib/qualification/patterns";
 import { scoreAoFromPatterns } from "@/lib/qualification/patterns";
 import { researchQualificationContext } from "@/lib/qualification/research";
+import { completeChat, hasConfiguredLlm } from "@/lib/llmChat";
 
 function text(value: unknown, fallback = "À confirmer") {
   const cleaned = String(value ?? "").trim();
@@ -891,23 +892,9 @@ async function callQualificationLlm(
   referentials: ReferentielItem[],
   patternScore: PatternScoreResult | undefined
 ) {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY;
-  if (!apiKey) return null;
-  const model = process.env.OPENAI_MODEL || process.env.LLM_MODEL || "gpt-4o-mini";
-  const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.15,
-      messages: [
-        {
-          role: "system",
-          content: [
+  if (!hasConfiguredLlm()) return null;
+
+  const system = [
             "Tu es un directeur de mission conseil senior chez Sia Partners Maroc.",
             "Tu produis une fiche de qualification opérationnelle V8 pour comité GO/WATCH/NO GO, au niveau d'une note manager exploitable.",
             "Le contenu doit être riche, spécifique au dossier, orienté décision et préparation de réponse.",
@@ -922,11 +909,9 @@ async function callQualificationLlm(
             "Tu dois également produire contextHighlight (problèmes/objectifs/keyPoint), keyQuestions (10 questions clés numérotées avec niveau GO/WARN/BLUE/GRAY), aoCalendar (étapes J, J+5, ... deadline, kickoff), responseFormat (documents PDF/PPT/Excel + sections techniques) et financeIndicative (simulation à partir des TJM référentiels).",
             "Le payload contient un patternScoring : intègre le manager recommandé et les patterns activés dans tes signaux et ta recommandation, sans inventer de patterns supplémentaires.",
             "Retourne exclusivement un JSON valide."
-          ].join(" ")
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
+  ].join(" ");
+
+  const user = JSON.stringify({
             expectedSchema: {
               executiveSummary: "string, synthèse décisionnelle précise",
               identification: {
@@ -1027,14 +1012,22 @@ async function callQualificationLlm(
                   guidance: "Utiliser ce score patterns /15 en COMPLÉMENT du goNoGoScore /100, citer les patterns activés dans qualificationSignals, et retenir le manager recommandé sauf contre-indication explicite du document."
                 }
               : { decision: "Aucun pattern Sia activé", guidance: "Ne pas inventer de pattern ; rester sur l'analyse documentaire." }
-          })
-        }
-      ]
-    })
   });
-  if (!response.ok) return null;
-  const json = await response.json();
-  return parseJsonObject(json.choices?.[0]?.message?.content || "");
+
+  const qualMaxTokens = parseInt(
+    process.env.LLM_QUALIFICATION_MAX_TOKENS || process.env.ANTHROPIC_MAX_OUTPUT_TOKENS || "16384",
+    10
+  );
+
+  const content = await completeChat({
+    system,
+    user,
+    temperature: 0.15,
+    maxOutputTokens: qualMaxTokens
+  });
+
+  if (!content) return null;
+  return parseJsonObject(content);
 }
 
 export async function generateIntelligentQualification(
