@@ -1,0 +1,22 @@
+{
+  "defaultTemplatePath": "C:\\Users\\Setup Game\\Documents\\Modèles Office personnalisés\\Copie de Sia_Template_Master.potx",
+  "profiles": {
+    "standard": [
+      "title",
+      "agenda",
+      "decision",
+      "identification",
+      "qualification",
+      "signals",
+      "risks",
+      "watchpoints",
+      "simulation",
+      "proposal",
+      "nextSteps",
+      "sources",
+      "conclusion"
+    ],
+    "short": ["title", "decision", "identification", "signals", "watchpoints", "conclusion"],
+    "finance": ["title", "decision", "identification", "simulation", "watchpoints", "sources", "conclusion"]
+  }
+}

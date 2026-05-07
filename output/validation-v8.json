@@ -1,0 +1,196 @@
+{
+  "generatedAt": "2026-05-07T19:51:14.453Z",
+  "ao": {
+    "aoNum": "OP00042236",
+    "displayAoNum": "OP00042236",
+    "client": "Afghanistan: System Enhancement for Health Action in Transition Project",
+    "subject": "Afghanistan: System Enhancement for Health Action in Transition Project",
+    "manager": "À confirmer",
+    "status": "A QUALIFIER",
+    "budget": "À confirmer",
+    "deadline": "À confirmer",
+    "deadlineDays": null,
+    "sourceName": "World Bank Procurement Notices",
+    "sourceKind": "public-api",
+    "sourceUrl": "https://search.worldbank.org/api/procnotices?format=json&id=OP00042236",
+    "buyer": "Afghanistan: System Enhancement for Health Action in Transition Project",
+    "country": "Non renseigné"
+  },
+  "decision": {
+    "recommendation": "WATCH",
+    "score": null,
+    "confidence": "Faible",
+    "reasons": [
+      "AO collecté depuis une source publique existante",
+      "Qualification détaillée à compléter"
+    ],
+    "vigilances": [
+      "Budget et date limite à confirmer"
+    ],
+    "nextAction": "Qualifier le dossier avec les pièces AO avant décision GO/NO GO."
+  },
+  "qualification": {
+    "executiveSummary": "Synthèse de validation générée à partir d’un AO réellement présent dans le cache local.",
+    "clientContext": "Afghanistan: System Enhancement for Health Action in Transition Project",
+    "scopeSynthesis": "Afghanistan: System Enhancement for Health Action in Transition Project",
+    "businessIssues": [
+      "Contract Award"
+    ],
+    "winThemes": [
+      "Clarification du besoin",
+      "Traçabilité source"
+    ],
+    "risks": [
+      {
+        "label": "Informations incomplètes",
+        "severity": "Moyen",
+        "mitigation": "Compléter la qualification documentaire.",
+        "source": "World Bank Procurement Notices"
+      }
+    ],
+    "clarificationQuestions": [
+      "Quels sont les critères de notation ?",
+      "Quel est le calendrier confirmé ?"
+    ],
+    "responseStrategy": "Compléter les sources avant engagement.",
+    "differentiators": [
+      "Réponse structurée",
+      "Données sourcées"
+    ],
+    "assumptions": [
+      "Budget et deadline non publiés dans la source cache."
+    ],
+    "documentName": "Cache AO natif",
+    "extractionStatus": "Validation technique",
+    "identification": {
+      "reference": "OP00042236",
+      "internalNumber": "OP00042236",
+      "buyer": "Afghanistan: System Enhancement for Health Action in Transition Project",
+      "program": "À confirmer",
+      "geography": "Non renseigné",
+      "object": "Afghanistan: System Enhancement for Health Action in Transition Project",
+      "missionType": "Contract Award",
+      "duration": "À confirmer",
+      "deadline": "À confirmer",
+      "submission": "À confirmer",
+      "budget": "À confirmer"
+    },
+    "missionPhases": [
+      {
+        "phase": "1. Qualification documentaire",
+        "objective": "Compléter les informations manquantes avant décision.",
+        "deliverables": [
+          "Questions de clarification",
+          "Synthèse GO/NO GO"
+        ]
+      },
+      {
+        "phase": "2. Préparation réponse",
+        "objective": "Structurer l’approche, les preuves et l’équipe.",
+        "deliverables": [
+          "Note méthodologique",
+          "Planning",
+          "Références"
+        ]
+      },
+      {
+        "phase": "3. Arbitrage manager",
+        "objective": "Valider le fit commercial et opérationnel.",
+        "deliverables": [
+          "Décision manager",
+          "Plan d’action"
+        ]
+      }
+    ],
+    "expectedDeliverables": [
+      "Fiche de qualification complète",
+      "Questions de clarification",
+      "Support comité GO/NO GO"
+    ],
+    "requiredProfile": [
+      "Manager responsable de la décision",
+      "Références similaires à confirmer",
+      "Capacité à documenter budget et planning"
+    ],
+    "qualificationSignals": [
+      {
+        "label": "Source publique fiable",
+        "detail": "Notice collectée depuis World Bank Procurement Notices.",
+        "impact": "Positif",
+        "scoreImpact": "+ signal source",
+        "source": "World Bank Procurement Notices"
+      },
+      {
+        "label": "Budget absent",
+        "detail": "Budget non publié dans la source cache.",
+        "impact": "Attention",
+        "scoreImpact": "à confirmer",
+        "source": "Cache AO"
+      },
+      {
+        "label": "Date limite absente",
+        "detail": "Date limite non publiée dans la source cache.",
+        "impact": "Attention",
+        "scoreImpact": "à confirmer",
+        "source": "Cache AO"
+      }
+    ],
+    "managerRecommendation": {
+      "primaryManager": "À confirmer",
+      "coReviewers": [
+        "Bid manager"
+      ],
+      "rationale": "Dossier à attribuer selon secteur, disponibilité et références.",
+      "decisionOwner": "Manager à confirmer"
+    },
+    "decisionWatchpoints": [
+      {
+        "point": "Budget et rentabilité",
+        "level": "Critique",
+        "question": "Le budget cible est-il confirmé et compatible avec une réponse rentable ?"
+      },
+      {
+        "point": "Échéance",
+        "level": "Critique",
+        "question": "La date limite de réponse est-elle confirmée ?"
+      },
+      {
+        "point": "Références",
+        "level": "À évaluer",
+        "question": "Dispose-t-on de références vérifiables similaires ?"
+      }
+    ],
+    "nextSteps": [
+      {
+        "action": "Valider GO/WATCH/NO GO avec manager",
+        "deadline": "J+1",
+        "owner": "Manager",
+        "workflowCommand": "GO OP00042236"
+      },
+      {
+        "action": "Compléter pièces AO et questions",
+        "deadline": "Avant P2P",
+        "owner": "Bid manager",
+        "workflowCommand": "P2P OP00042236"
+      },
+      {
+        "action": "Préparer note méthodologique",
+        "deadline": "Après GO",
+        "owner": "Équipe propale",
+        "workflowCommand": "section approche OP00042236"
+      }
+    ]
+  },
+  "simulation": null,
+  "proposal": null,
+  "storyboard": [],
+  "referentials": [],
+  "sources": [
+    {
+      "title": "World Bank Procurement Notices",
+      "url": "https://search.worldbank.org/api/procnotices?format=json&id=OP00042236",
+      "excerpt": "Afghanistan: System Enhancement for Health Action in Transition Project",
+      "consultedAt": "2026-05-07T18:28:21.827Z"
+    }
+  ]
+}
