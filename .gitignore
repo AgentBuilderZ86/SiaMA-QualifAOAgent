@@ -13,3 +13,10 @@ pnpm-debug.log*
 
 # Local Netlify folder
 .netlify
+
+# Build incremental cache
+*.tsbuildinfo
+
+# Local scratch dirs / zips (ne pas versionner)
+.tmp-*/
+.tmp-*.zip
