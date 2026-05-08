@@ -1,0 +1,16 @@
+## Netlify configuration for Next.js (App Router)
+## - Build uses Next.js output and Netlify Next Runtime.
+## - Do NOT commit secrets; configure env vars in Netlify UI.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+## Netlify detects Next.js and uses the Next runtime automatically.
+## Keeping explicit plugin helps pin behavior across UI/CLI.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+## Large uploads: Server Actions body size is controlled by Next config
+## but Netlify functions may have limits; keep documents reasonably sized.
+

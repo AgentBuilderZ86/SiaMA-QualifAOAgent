@@ -22,10 +22,12 @@
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.11",
     "@types/node": "latest",
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "netlify-cli": "^26.0.1",
     "typescript": "latest"
   }
 }
