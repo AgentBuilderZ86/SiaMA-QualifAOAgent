@@ -7,6 +7,7 @@ import { QualificationIntelligenceView } from "./qualificationView";
 import { DecisionPanel } from "./decisionPanel";
 import { WorkflowFlow } from "./workflow";
 import { AppShell, PageHeader, Pill, type SideRailGroup } from "@/components/shell";
+import { delayLabel } from "@/lib/aoDeadline";
 
 function field(label: string, value: string | number | null | undefined) {
   return (
@@ -19,6 +20,7 @@ function field(label: string, value: string | number | null | undefined) {
 
 function delayClass(jours: number | null | undefined): string {
   if (typeof jours !== "number") return "";
+  if (jours < 0) return " crit";
   if (jours <= 5) return " crit";
   if (jours <= 10) return " warn";
   return "";
@@ -89,7 +91,7 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
           <div className="lbl">Délai</div>
           <div className="num">
             <span className={`delay${delayClass(ao.delaiJours)}`} style={{ fontSize: 22, padding: "0 12px", height: 30 }}>
-              {ao.delaiJours !== null ? `J+${ao.delaiJours}` : "NC"}
+              {delayLabel(ao.delaiJours)}
             </span>
           </div>
           <div className="delta">{ao.dateLimite || "Date limite NC"}</div>

@@ -13,6 +13,7 @@ import {
 } from "./dashboardFilters";
 import { buildDashboardRail } from "./dashboardRail";
 import { DashboardClientSearchForm } from "./DashboardExtendFilter";
+import { delayLabel } from "@/lib/aoDeadline";
 
 type DashSearchParams = Record<string, string | string[] | undefined>;
 
@@ -31,14 +32,10 @@ const PIPELINE_STATUSES = ["A QUALIFIER", "GO", "BO", "P2P", "PS", "PITCH", "PW"
 
 function delayClass(jours: number | null | undefined): string {
   if (typeof jours !== "number") return "";
+  if (jours < 0) return " crit";
   if (jours <= 5) return " crit";
   if (jours <= 10) return " warn";
   return "";
-}
-
-function delayLabel(jours: number | null | undefined): string {
-  if (typeof jours !== "number") return "NC";
-  return `J+${jours}`;
 }
 
 function managerInitials(name: string): string {
@@ -132,8 +129,7 @@ function PipelineKanban({ records }: { records: DashboardAo[] }) {
                   <strong>{ao.client}</strong>
                   <span>{ao.sujet}</span>
                   <small>
-                    {ao.delaiJours !== null ? `J+${ao.delaiJours}` : "Délai NC"} ·{" "}
-                    {ao.sourceKind === "google-sheet" ? "Google" : "Scrappé"}
+                    {delayLabel(ao.delaiJours)} · {ao.sourceKind === "google-sheet" ? "Google" : "Scrappé"}
                   </small>
                 </Link>
               ))}

@@ -1,3 +1,4 @@
+import { delayLabel, urgentByDeadline } from "@/lib/aoDeadline";
 import type {
   AoRecord,
   IntelligentQualificationFiche,
@@ -357,9 +358,10 @@ function fallbackKeyQuestions(fiche: QualificationFiche): QualificationKeyQuesti
 
 function fallbackCalendar(ao: AoRecord): QualificationCalendarEntry[] {
   const deadlineDays = ao.delaiJours;
-  const deadlineLabel = deadlineDays !== null && deadlineDays !== undefined
-    ? `J+${Math.max(0, deadlineDays)}`
-    : ao.dateLimite || "J+?";
+  const deadlineLabel =
+    deadlineDays !== null && deadlineDays !== undefined && !Number.isNaN(deadlineDays)
+      ? delayLabel(deadlineDays)
+      : ao.dateLimite || "J+?";
   return [
     { dayLabel: "J", label: "Lancement officiel — réception du dossier de consultation", milestone: null },
     { dayLabel: "J+5", label: "Constitution de l'équipe propale et ouverture du dossier interne", milestone: null },
@@ -492,8 +494,13 @@ function fallbackSignals(ao: AoRecord, fiche: QualificationFiche): Qualification
     },
     {
       label: "Délai de réponse",
-      detail: ao.delaiJours !== null ? `${ao.delaiJours} jours restants` : ao.dateLimite || "Date limite à confirmer.",
-      impact: ao.delaiJours !== null && ao.delaiJours <= 7 ? "Attention" : "Neutre",
+      detail:
+        ao.delaiJours !== null && ao.delaiJours !== undefined
+          ? ao.delaiJours < 0
+            ? "Échéance dépassée — vérifier prorogation ou clôturer le dossier."
+            : `${ao.delaiJours} jours restants`
+          : ao.dateLimite || "Date limite à confirmer.",
+      impact: urgentByDeadline(ao) ? "Attention" : ao.delaiJours !== null && ao.delaiJours < 0 ? "Bloquant" : "Neutre",
       source: ao.sourceName || "Données AO"
     }
   ];
@@ -532,7 +539,11 @@ function fallbackNextSteps(ao: AoRecord): QualificationNextStep[] {
   return [
     {
       action: "Valider GO/NO GO avec le manager",
-      deadline: ao.delaiJours !== null && ao.delaiJours <= 7 ? "Aujourd'hui / J+1" : "À planifier",
+      deadline: urgentByDeadline(ao)
+        ? "Aujourd'hui / J+1"
+        : ao.delaiJours !== null && ao.delaiJours !== undefined && ao.delaiJours < 0
+          ? "Échue — arbitrage"
+          : "À planifier",
       owner: ao.manager || "Manager à confirmer",
       workflowCommand: `GO ${ao.displayAoNum || ao.aoNum}`
     },

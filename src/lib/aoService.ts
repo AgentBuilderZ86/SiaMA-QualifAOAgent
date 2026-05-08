@@ -7,6 +7,7 @@ import { generateProposalSection, generateQualificationRecommendation } from "@/
 import { getSheetsConfigStatus } from "@/lib/google";
 import { readAoCache } from "@/lib/aoSources/cache";
 import { generateIntelligentQualification } from "@/lib/qualification/intelligence";
+import { operationalDeadlineSubset, urgentByDeadline } from "@/lib/aoDeadline";
 import type { AoRecord, AoStatus, ClosureReport, FinancialSimulation, QualificationFiche } from "@/lib/aoTypes";
 
 export type DashboardData = {
@@ -61,7 +62,7 @@ function statusCounts(records: AoRecord[]) {
     activePipeline: records.filter((ao) => ["BO", "P2P", "PS", "PITCH"].includes(ao.statut)).length,
     won: records.filter((ao) => ao.statut === "PW").length,
     lost: records.filter((ao) => ao.statut === "PL").length,
-    urgent: records.filter((ao) => ao.delaiJours !== null && ao.delaiJours <= 7).length
+    urgent: records.filter(urgentByDeadline).length
   };
 }
 
@@ -73,7 +74,7 @@ function groupByManager(records: AoRecord[]) {
       manager,
       total: aos.length,
       go: aos.filter((ao) => ao.statut === "GO").length,
-      urgent: aos.filter((ao) => ao.delaiJours !== null && ao.delaiJours <= 7).length
+      urgent: aos.filter(urgentByDeadline).length
     }))
     .sort((a, b) => b.total - a.total);
 }
@@ -84,20 +85,18 @@ export async function getDashboardData(): Promise<DashboardData> {
   try {
     const cache = await readAoCache();
     const groups = await aoRepository.listGroupedAos();
-    const records = groups.combined;
-    if (!status.configured && records.length === 0) {
+    const combined = groups.combined;
+    const records = operationalDeadlineSubset(combined);
+    if (!status.configured && combined.length === 0) {
       return {
         ...emptyDashboard(status),
         generatedAt: cache.generatedAt || new Date().toISOString(),
         sourceReport: cache.report
       };
     }
-    const urgent = records
-      .filter((ao) => ao.delaiJours !== null && ao.delaiJours <= 7)
-      .sort((a, b) => (a.delaiJours ?? 999) - (b.delaiJours ?? 999))
-      .slice(0, 12);
+    const urgent = records.filter(urgentByDeadline).sort((a, b) => (a.delaiJours ?? 999) - (b.delaiJours ?? 999)).slice(0, 12);
     return {
-      configured: status.configured || records.length > 0,
+      configured: status.configured || combined.length > 0,
       missingConfig: status.configured ? [] : status.missing,
       loadError: "",
       generatedAt: cache.generatedAt || new Date().toISOString(),
@@ -106,10 +105,10 @@ export async function getDashboardData(): Promise<DashboardData> {
       totals: statusCounts(records),
       byManager: groupByManager(records).slice(0, 8),
       urgent,
-      recent: records.slice(0, 20),
+      recent: [...records].sort((a, b) => (a.delaiJours ?? 999) - (b.delaiJours ?? 999)).slice(0, 20),
       records,
-      googleSheetRecords: groups.googleSheet,
-      scrapedRecords: groups.scraped
+      googleSheetRecords: operationalDeadlineSubset(groups.googleSheet),
+      scrapedRecords: operationalDeadlineSubset(groups.scraped)
     };
   } catch (error) {
     return emptyDashboard(status, error instanceof Error ? error.message : "Erreur inconnue pendant la lecture Google Sheets.");

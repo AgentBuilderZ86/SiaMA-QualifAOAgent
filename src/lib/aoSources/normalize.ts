@@ -1,3 +1,4 @@
+import { normalizeAoDeadlines } from "@/lib/aoDeadline";
 import type { AoDataQuality, AoRecord } from "@/lib/aoTypes";
 import type { CollectedAo } from "@/lib/aoSources/types";
 
@@ -77,7 +78,7 @@ export function dedupeCollectedAos(records: CollectedAo[]) {
 
 export function collectedAoToRecord(ao: CollectedAo): AoRecord {
   const quality = assessQuality(ao);
-  return {
+  return normalizeAoDeadlines({
     aoNum: stableId(ao.sourceName, ao.sourceNoticeId),
     displayAoNum: ao.sourceNoticeId,
     client: ao.buyer || "Client non renseigné",
@@ -103,5 +104,5 @@ export function collectedAoToRecord(ao: CollectedAo): AoRecord {
     currency: ao.currency,
     dataQuality: quality,
     raw: ao.raw
-  };
+  });
 }

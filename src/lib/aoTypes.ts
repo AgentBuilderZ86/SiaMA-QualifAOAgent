@@ -1,4 +1,5 @@
 import type { SheetRecord, SheetRow } from "@/lib/google";
+import { normalizeAoDeadlines } from "@/lib/aoDeadline";
 import type { FilenameSignals } from "@/lib/qualification/filenameSignals";
 import type { PatternScoreResult } from "@/lib/qualification/patterns";
 
@@ -385,7 +386,7 @@ export function sheetRecordToAo(row: SheetRecord | SheetRow, sourceTab: string, 
   const displayAoNum = row["N° d'ordre"] || row["N° AO"] || "";
   const syntheticAoNum = rowIndexRaw ? `ROW:${sourceTab}:${rowIndexRaw}` : "NC";
 
-  return {
+  return normalizeAoDeadlines({
     aoNum: displayAoNum || syntheticAoNum,
     displayAoNum: displayAoNum || "Non renseigné",
     client: row.CLIENT || row.Client || "Client non renseigné",
@@ -402,7 +403,7 @@ export function sheetRecordToAo(row: SheetRecord | SheetRow, sourceTab: string, 
     sourceKind: "google-sheet",
     sourceName: sourceTab,
     raw: row
-  };
+  });
 }
 
 function firstMeaningful(...values: Array<string | number | null | undefined>) {
@@ -420,7 +421,7 @@ export function mergeAoRecords(source: AoRecord | null, pipeline: AoRecord | nul
   if (!source) return pipeline;
   if (!pipeline) return source;
 
-  return {
+  return normalizeAoDeadlines({
     ...source,
     aoNum: firstMeaningful(source.aoNum, pipeline.aoNum) || source.aoNum,
     displayAoNum: firstMeaningful(source.displayAoNum, pipeline.displayAoNum) || source.displayAoNum,
@@ -448,5 +449,5 @@ export function mergeAoRecords(source: AoRecord | null, pipeline: AoRecord | nul
     currency: source.currency,
     dataQuality: source.dataQuality,
     raw: { ...source.raw, ...pipeline.raw }
-  };
+  });
 }

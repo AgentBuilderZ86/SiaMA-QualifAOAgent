@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getDashboardData } from "@/lib/ao";
 import { requireUser } from "@/lib/auth";
 import { AppShell, type SideRailGroup } from "@/components/shell";
+import { delayLabel, urgentByDeadline } from "@/lib/aoDeadline";
+import type { AoRecord } from "@/lib/aoTypes";
 
 const PIPELINE_DISPLAY_LIMIT = 4;
 
@@ -10,10 +12,9 @@ function formatBudget(value: string | undefined): string {
   return value;
 }
 
-function delayLabel(jours: number | null | undefined): string {
-  if (typeof jours !== "number") return "NC";
-  if (jours <= 5) return `J+${jours} ⚠`;
-  return `J+${jours}`;
+function delayLabelUi(ao: AoRecord) {
+  const base = delayLabel(ao.delaiJours);
+  return urgentByDeadline(ao) ? `${base} ⚠` : base;
 }
 
 function pillClassFromStatus(status: string): string {
@@ -139,8 +140,8 @@ export default async function ChatPage() {
                           <td>{ao.client}</td>
                           <td>{ao.sujet || "—"}</td>
                           <td className="num">{formatBudget(ao.budget)}</td>
-                          <td className="num" style={{ color: typeof ao.delaiJours === "number" && ao.delaiJours <= 5 ? "var(--reco-nogo)" : undefined }}>
-                            {delayLabel(ao.delaiJours)}
+                          <td className="num" style={{ color: urgentByDeadline(ao) ? "var(--reco-nogo)" : undefined }}>
+                            {delayLabelUi(ao)}
                           </td>
                         </tr>
                       ))}
@@ -176,7 +177,7 @@ export default async function ChatPage() {
                     <div className="ident" style={{ marginTop: 8 }}>{focusAo.sujet || "Sujet à confirmer"}</div>
                     <div className="meta">
                       {focusAo.client} · {focusAo.manager || "Manager non assigné"} ·{" "}
-                      {formatBudget(focusAo.budget)} · {delayLabel(focusAo.delaiJours)}
+                      {formatBudget(focusAo.budget)} · {delayLabelUi(focusAo)}
                     </div>
                     <p style={{ marginTop: 10 }}>
                       <i>

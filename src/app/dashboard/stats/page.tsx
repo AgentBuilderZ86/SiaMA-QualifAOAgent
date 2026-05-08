@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { AppShell, PageHeader, Pill, RecoBadge } from "@/components/shell";
 import { logoutAction, refreshAoSourcesAction } from "../actions";
 import { buildDashboardRail } from "../dashboardRail";
+import { urgentByDeadline } from "@/lib/aoDeadline";
 import { dashboardPathWithFilters, filterDashboardRecords, parsePipelineFilters } from "../dashboardFilters";
 
 type SP = Record<string, string | string[] | undefined>;
@@ -19,7 +20,7 @@ export default async function DashboardStatsPage({ searchParams }: { searchParam
   const recoGo = scoped.filter((ao) => (ao.decisionIa || "").toUpperCase() === "GO").length;
   const recoNogo = scoped.filter((ao) => (ao.decisionIa || "").toUpperCase() === "NO GO").length;
   const recoWatch = scoped.length - recoGo - recoNogo;
-  const urgentFiltered = scoped.filter((ao) => ao.delaiJours !== null && ao.delaiJours <= 7).length;
+  const urgentFiltered = scoped.filter(urgentByDeadline).length;
   const activeFiltered = scoped.filter((ao) => ["BO", "P2P", "PS", "PITCH"].includes(ao.statut)).length;
 
   const subScope =

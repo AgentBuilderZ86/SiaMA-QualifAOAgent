@@ -5,17 +5,14 @@ import { AppShell, PageHeader, Pill } from "@/components/shell";
 import { logoutAction, refreshAoSourcesAction } from "../actions";
 import { buildDashboardRail } from "../dashboardRail";
 import { filterDashboardRecords, parsePipelineFilters } from "../dashboardFilters";
+import { delayLabel } from "@/lib/aoDeadline";
 
 function delayClass(jours: number | null | undefined): string {
   if (typeof jours !== "number") return "";
+  if (jours < 0) return " crit";
   if (jours <= 5) return " crit";
   if (jours <= 10) return " warn";
   return "";
-}
-
-function delayLabel(jours: number | null | undefined): string {
-  if (typeof jours !== "number") return "NC";
-  return `J+${jours}`;
 }
 
 type SP = Record<string, string | string[] | undefined>;
