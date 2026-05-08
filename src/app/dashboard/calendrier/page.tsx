@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { AppShell, PageHeader, Pill } from "@/components/shell";
 import { logoutAction, refreshAoSourcesAction } from "../actions";
 import { buildDashboardRail } from "../dashboardRail";
+import { filterDashboardRecords, parsePipelineFilters } from "../dashboardFilters";
 
 function delayClass(jours: number | null | undefined): string {
   if (typeof jours !== "number") return "";
@@ -17,24 +18,30 @@ function delayLabel(jours: number | null | undefined): string {
   return `J+${jours}`;
 }
 
-export default async function DashboardCalendrierPage() {
+type SP = Record<string, string | string[] | undefined>;
+
+export default async function DashboardCalendrierPage({ searchParams }: { searchParams: Promise<SP> }) {
   const user = await requireUser();
   const data = await getDashboardData();
-  const rail = buildDashboardRail(data, "calendrier");
+  const filters = parsePipelineFilters(await searchParams);
+  const rail = buildDashboardRail(data, "calendrier", filters);
 
-  const sorted = [...data.records].sort((a, b) => {
+  const scoped = filterDashboardRecords(data.records, filters);
+  const sorted = [...scoped].sort((a, b) => {
     const da = a.delaiJours ?? 9999;
     const db = b.delaiJours ?? 9999;
     if (da !== db) return da - db;
     return (a.dateLimite || "").localeCompare(b.dateLimite || "") || a.client.localeCompare(b.client);
   });
 
+  const subCount = scoped.length !== data.records.length ? `${sorted.length} AOs après filtre (${data.records.length} au total)` : `${data.totals.all} AOs`;
+
   return (
     <AppShell user={user} product="AO Agent" rail={rail}>
       <PageHeader
         eyebrow="Vue calendrier"
         title="Échéances et délais"
-        sub={`${data.totals.all} AOs · tri par délai croissant (J+N). Les dates limites affichées proviennent des sources chargées.`}
+        sub={`${subCount} · tri par délai croissant (J+N). Les dates limites affichées proviennent des sources chargées.`}
         actions={
           <>
             <form action={refreshAoSourcesAction}>

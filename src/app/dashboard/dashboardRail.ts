@@ -1,9 +1,36 @@
 import type { DashboardData } from "@/lib/aoService";
 import type { SideRailGroup } from "@/components/shell";
+import {
+  dashboardPathWithFilters,
+  patchPipelineFilters,
+  type DashboardPipelineFilters
+} from "./dashboardFilters";
 
 export type DashboardActiveView = "pipeline" | "calendrier" | "stats";
 
-export function buildDashboardRail(data: DashboardData, active: DashboardActiveView): SideRailGroup[] {
+const STATUS_KEYS = [
+  { label: "⏳ A qualifier", statut: "A QUALIFIER" },
+  { label: "🔵 BO", statut: "BO" },
+  { label: "📝 P2P", statut: "P2P" },
+  { label: "📤 PS", statut: "PS" },
+  { label: "🎤 PITCH", statut: "PITCH" },
+  { label: "✅ PW", statut: "PW" },
+  { label: "❌ PL", statut: "PL" }
+] as const;
+
+function basePathForView(active: DashboardActiveView): string {
+  if (active === "calendrier") return "/dashboard/calendrier";
+  if (active === "stats") return "/dashboard/stats";
+  return "/dashboard";
+}
+
+/** Rail pour les vues pipeline / calendrier / stats : liens filtres avec query préservée. */
+export function buildDashboardRail(
+  data: DashboardData,
+  active: DashboardActiveView,
+  filters: DashboardPipelineFilters
+): SideRailGroup[] {
+  const path = basePathForView(active);
   const statusCounts = {
     aq: data.totals.aQualifier,
     bo: data.records.filter((ao) => ao.statut === "BO").length,
@@ -13,32 +40,75 @@ export function buildDashboardRail(data: DashboardData, active: DashboardActiveV
     pw: data.totals.won,
     pl: data.totals.lost
   };
+  const countsByStatut = new Map(
+    STATUS_KEYS.map(({ statut }) => [
+      statut,
+      statut === "A QUALIFIER"
+        ? statusCounts.aq
+        : statut === "BO"
+          ? statusCounts.bo
+          : statut === "P2P"
+            ? statusCounts.p2p
+            : statut === "PS"
+              ? statusCounts.ps
+              : statut === "PITCH"
+                ? statusCounts.pitch
+                : statut === "PW"
+                  ? statusCounts.pw
+                  : statut === "PL"
+                    ? statusCounts.pl
+                    : 0
+    ])
+  );
+
+  const isStatutActive = (st: string) => filters.statuts.length === 1 && filters.statuts[0] === st;
 
   return [
     {
       title: "Vue",
       items: [
-        { label: "📊 Pipeline", href: "/dashboard", count: data.totals.all, active: active === "pipeline" },
-        { label: "📅 Calendrier", href: "/dashboard/calendrier", active: active === "calendrier" },
-        { label: "📈 Stats & KPIs", href: "/dashboard/stats", active: active === "stats" },
+        {
+          label: "📊 Pipeline",
+          href: dashboardPathWithFilters("/dashboard", filters),
+          count: data.totals.all,
+          active: active === "pipeline"
+        },
+        {
+          label: "📅 Calendrier",
+          href: dashboardPathWithFilters("/dashboard/calendrier", filters),
+          active: active === "calendrier"
+        },
+        {
+          label: "📈 Stats & KPIs",
+          href: dashboardPathWithFilters("/dashboard/stats", filters),
+          active: active === "stats"
+        },
         { label: "🗂 Historique runs", href: "/audit" }
       ]
     },
     {
       title: "Statuts",
-      items: [
-        { label: "⏳ A qualifier", count: statusCounts.aq },
-        { label: "🔵 BO", count: statusCounts.bo },
-        { label: "📝 P2P", count: statusCounts.p2p },
-        { label: "📤 PS", count: statusCounts.ps },
-        { label: "🎤 PITCH", count: statusCounts.pitch },
-        { label: "✅ PW", count: statusCounts.pw },
-        { label: "❌ PL", count: statusCounts.pl }
-      ]
+      items: STATUS_KEYS.map(({ label, statut }) => {
+        const merged = patchPipelineFilters(filters, { statuts: [statut], manager: null, client: null, reco: null, delaiMax: null });
+        return {
+          label,
+          count: countsByStatut.get(statut) ?? 0,
+          href: dashboardPathWithFilters(path, merged),
+          active: isStatutActive(statut)
+        };
+      })
     },
     {
       title: "Managers",
-      items: data.byManager.slice(0, 6).map((m) => ({ label: m.manager, count: m.total }))
+      items: data.byManager.slice(0, 6).map((m) => {
+        const merged = patchPipelineFilters(filters, { manager: m.manager, reco: null, delaiMax: null });
+        return {
+          label: m.manager,
+          count: m.total,
+          href: dashboardPathWithFilters(path, merged),
+          active: Boolean(filters.manager && filters.manager.trim() === m.manager.trim())
+        };
+      })
     },
     {
       title: "Outils",

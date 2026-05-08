@@ -4,23 +4,35 @@ import { requireUser } from "@/lib/auth";
 import { AppShell, PageHeader, Pill, RecoBadge } from "@/components/shell";
 import { logoutAction, refreshAoSourcesAction } from "../actions";
 import { buildDashboardRail } from "../dashboardRail";
+import { dashboardPathWithFilters, filterDashboardRecords, parsePipelineFilters } from "../dashboardFilters";
 
-export default async function DashboardStatsPage() {
+type SP = Record<string, string | string[] | undefined>;
+
+export default async function DashboardStatsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const user = await requireUser();
   const data = await getDashboardData();
-  const rail = buildDashboardRail(data, "stats");
+  const filters = parsePipelineFilters(await searchParams);
+  const rail = buildDashboardRail(data, "stats", filters);
 
-  const byStatus = (s: string) => data.records.filter((ao) => ao.statut === s).length;
-  const recoGo = data.records.filter((ao) => (ao.decisionIa || "").toUpperCase() === "GO").length;
-  const recoNogo = data.records.filter((ao) => (ao.decisionIa || "").toUpperCase() === "NO GO").length;
-  const recoWatch = data.records.length - recoGo - recoNogo;
+  const scoped = filterDashboardRecords(data.records, filters);
+  const byStatus = (s: string) => scoped.filter((ao) => ao.statut === s).length;
+  const recoGo = scoped.filter((ao) => (ao.decisionIa || "").toUpperCase() === "GO").length;
+  const recoNogo = scoped.filter((ao) => (ao.decisionIa || "").toUpperCase() === "NO GO").length;
+  const recoWatch = scoped.length - recoGo - recoNogo;
+  const urgentFiltered = scoped.filter((ao) => ao.delaiJours !== null && ao.delaiJours <= 7).length;
+  const activeFiltered = scoped.filter((ao) => ["BO", "P2P", "PS", "PITCH"].includes(ao.statut)).length;
+
+  const subScope =
+    scoped.length !== data.records.length
+      ? `${scoped.length} AOs après filtre (sur ${data.records.length})`
+      : `${data.totals.all} AOs suivis`;
 
   return (
     <AppShell user={user} product="AO Agent" rail={rail}>
       <PageHeader
         eyebrow="Pilotage"
         title="Statistiques et KPIs"
-        sub={`Synthèse sur ${data.totals.all} AOs suivis · dernière sync ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(data.generatedAt))}`}
+        sub={`${subScope} · dernière sync ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(data.generatedAt))}`}
         actions={
           <>
             <form action={refreshAoSourcesAction}>
@@ -28,7 +40,7 @@ export default async function DashboardStatsPage() {
                 ↻ Rafraîchir sources
               </button>
             </form>
-            <Link className="btn btn--ghost" href="/dashboard">
+            <Link className="btn btn--ghost" href={dashboardPathWithFilters("/dashboard", filters)}>
               Pipeline
             </Link>
             <form action={logoutAction}>
@@ -43,17 +55,17 @@ export default async function DashboardStatsPage() {
       <div className="kpi-strip" style={{ marginBottom: 18 }}>
         <div className="kpi active">
           <div className="lbl">Volume total</div>
-          <div className="num">{data.totals.all}</div>
+          <div className="num">{scoped.length}</div>
           <div className="delta">AOs suivis</div>
         </div>
         <div className="kpi">
           <div className="lbl">Pipeline actif</div>
-          <div className="num">{data.totals.activePipeline}</div>
+          <div className="num">{activeFiltered}</div>
           <div className="delta">BO → PITCH</div>
         </div>
         <div className="kpi">
           <div className="lbl">Urgents</div>
-          <div className="num">{data.totals.urgent}</div>
+          <div className="num">{urgentFiltered}</div>
           <div className="delta">≤ 7 jours</div>
         </div>
         <div className="kpi">
@@ -116,7 +128,7 @@ export default async function DashboardStatsPage() {
               </tr>
             </thead>
             <tbody>
-              {data.records
+              {scoped
                 .filter((ao) => (ao.decisionIa || "").trim())
                 .slice(0, 15)
                 .map((ao, i) => (
@@ -135,7 +147,7 @@ export default async function DashboardStatsPage() {
                     </td>
                   </tr>
                 ))}
-              {data.records.every((ao) => !(ao.decisionIa || "").trim()) ? (
+              {scoped.every((ao) => !(ao.decisionIa || "").trim()) ? (
                 <tr>
                   <td colSpan={4} className="muted">
                     Aucune décision IA enregistrée sur les AOs chargés.
