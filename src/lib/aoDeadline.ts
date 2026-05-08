@@ -19,17 +19,27 @@ function utcTodayStart(now = new Date()) {
   return utcMidnight(now.getTime());
 }
 
+/** Nombre exploitable depuis la feuille / JSON (minus Unicode, chaînes). */
+export function numericDelaiJours(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const s = String(value)
+    .trim()
+    .replace(/−/g, "-")
+    .replace(",", ".");
+  if (!s || Number.isNaN(Number(s))) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 /**
- * Tente de parser DATE DE REPONSE / date limite (ISO, JJ/MM/AAAA, JJ.MM.AAAA…).
+ * Tente de parser DATE DE REPONSE / date limite (JJ/MM/AAAA avant Date.parse pour éviter l’ambiguïté mois/jour US, puis ISO).
  */
 export function parseDateLimiteText(raw: string): number | null {
   const sRaw = trim(raw).replace(/^le\s+/i, "");
   if (!sRaw) return null;
   /** Garde JJ/MM/AAAA même si horaire ou suffixe après espace */
   const s = (sRaw.split(/\s*T/)[0] ?? sRaw).split(/\s+/)[0] ?? sRaw;
-
-  const iso = Date.parse(sRaw);
-  if (!Number.isNaN(iso)) return utcMidnight(iso);
 
   const fr = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/);
   if (fr) {
@@ -43,34 +53,39 @@ export function parseDateLimiteText(raw: string): number | null {
   }
 
   const frLong = s.match(/^(\d{1,2})\s+(janv|janvier|fév|fev|mars|avr|mai|juin|juil|juillet|août|aout|sept|oct|nov|déc|dec)[a-zÉéà]*\.?\s+(\d{4})/i);
-  if (!frLong) return null;
+  if (frLong) {
+    const day = Number(frLong[1]);
+    const ym = Number(frLong[3]);
+    const monthStr = frLong[2].toLowerCase();
+    const months: Record<string, number> = {
+      janv: 0,
+      janvier: 0,
+      fév: 1,
+      fev: 1,
+      mars: 2,
+      avr: 3,
+      mai: 4,
+      juin: 5,
+      juil: 6,
+      juillet: 6,
+      août: 7,
+      aout: 7,
+      sept: 8,
+      oct: 9,
+      nov: 10,
+      déc: 11,
+      dec: 11
+    };
+    const mi = months[monthStr];
+    if (mi !== undefined && Number.isFinite(day)) {
+      const t = Date.UTC(ym, mi, day);
+      if (!Number.isNaN(t)) return t;
+    }
+  }
 
-  const day = Number(frLong[1]);
-  const ym = Number(frLong[3]);
-  const monthStr = frLong[2].toLowerCase();
-  const months: Record<string, number> = {
-    janv: 0,
-    janvier: 0,
-    fév: 1,
-    fev: 1,
-    mars: 2,
-    avr: 3,
-    mai: 4,
-    juin: 5,
-    juil: 6,
-    juillet: 6,
-    août: 7,
-    aout: 7,
-    sept: 8,
-    oct: 9,
-    nov: 10,
-    déc: 11,
-    dec: 11
-  };
-  const mi = months[monthStr];
-  if (mi === undefined || !Number.isFinite(day)) return null;
-  const t = Date.UTC(ym, mi, day);
-  return Number.isNaN(t) ? null : t;
+  const iso = Date.parse(sRaw);
+  if (!Number.isNaN(iso)) return utcMidnight(iso);
+  return null;
 }
 
 /**
@@ -88,25 +103,31 @@ export function deriveDelaiJoursFromDateLimite(dateLimite: string, now = new Dat
 }
 
 /**
- * Recalcule `delaiJours` depuis `dateLimite` si elle est lisible ; sinon garde la valeur existante uniquement si ≥ -7 (erreur évidente hors plausibilité métier courte).
+ * Recalcule `delaiJours` depuis `dateLimite` si elle est lisible ; sinon coerce la colonne « jours » (chaîne/feuille) ; fortement négatif sans date ⇒ null.
  */
 export function normalizeAoDeadlines<T extends AoRecord>(ao: T, now = new Date()): T {
   const dl = deriveDelaiJoursFromDateLimite(ao.dateLimite, now);
   if (dl !== null) {
     return { ...ao, delaiJours: dl };
   }
-  const sj = ao.delaiJours;
-  if (typeof sj !== "number" || Number.isNaN(sj)) return { ...ao, delaiJours: null };
+  const sj = numericDelaiJours(ao.delaiJours);
+  if (sj === null) return { ...ao, delaiJours: null };
   /** Colonne Excel parfois négative large sans date lisible → on neutralise pour l’UX */
   if (sj < -30) return { ...ao, delaiJours: null };
-  return ao;
+  return { ...ao, delaiJours: sj };
 }
 
-/** AO à afficher dans le pilotage tableau de bord : date lisible ⇒ remise dans le futur incluant ce jour-J ; sinon gardé pour ne pas faire disparaître les dossiers sans date parsée. */
+/**
+ * AO à afficher dans le pilotage tableau de bord :
+ * - date lisible ⇒ remise aujourd’hui ou futur ;
+ * - sinon, si délai (jours) est un nombre &lt; 0 ⇒ exclu (feuille indique échéance dépassée).
+ */
 export function isOperationalAoByDeadline(ao: AoRecord, now = new Date()): boolean {
   const parsed = parseDateLimiteText(ao.dateLimite);
-  if (parsed === null) return true;
-  return parsed >= utcTodayStart(now);
+  if (parsed !== null) return parsed >= utcTodayStart(now);
+  const d = numericDelaiJours(ao.delaiJours);
+  if (d !== null && d < 0) return false;
+  return true;
 }
 
 export function operationalDeadlineSubset(records: AoRecord[], now = new Date()): AoRecord[] {
@@ -115,11 +136,14 @@ export function operationalDeadlineSubset(records: AoRecord[], now = new Date())
 }
 
 export function delayLabel(delaiJours: number | null | undefined): string {
-  if (typeof delaiJours !== "number" || Number.isNaN(delaiJours)) return "NC";
-  if (delaiJours < 0) return "Échu";
-  return `J+${delaiJours}`;
+  const n = numericDelaiJours(delaiJours);
+  if (n === null) return "NC";
+  if (n < 0) return "Échu";
+  return `J+${n}`;
 }
 
+/** Urgent = entre 0 et 7 jours inclus (n’inclut jamais les délais négatifs : l’ancien filtre « ≤ 7 » les englobait à tort). */
 export function urgentByDeadline(ao: AoRecord): boolean {
-  return ao.delaiJours !== null && ao.delaiJours >= 0 && ao.delaiJours <= 7;
+  const n = numericDelaiJours(ao.delaiJours);
+  return n !== null && n >= 0 && n <= 7;
 }

@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/ao";
+
+/** Données AO toujours fraîches (évite un HTML « urgents » ou délais obsolètes servi depuis le cache CDN). */
+export const dynamic = "force-dynamic";
 import { requireUser } from "@/lib/auth";
 import { logoutAction, refreshAoSourcesAction } from "./actions";
 import { AppShell, PageHeader, Pill, RecoBadge } from "@/components/shell";

@@ -2,6 +2,7 @@
  * Filtres du pipeline (/dashboard…) via query string : statuts, manager, client, reco, délai max.
  */
 
+import { numericDelaiJours } from "@/lib/aoDeadline";
 import type { AoRecord } from "@/lib/aoTypes";
 
 export type DashboardRecoFilter = "go" | "watch" | "nogo";
@@ -109,11 +110,14 @@ export function filterDashboardRecords(records: AoRecord[], filters: DashboardPi
       if (!hay.includes(q)) return false;
     }
     if (!matchesReco(ao, filters.reco)) return false;
-    if (filters.delaiMax !== undefined && (ao.delaiJours === null || ao.delaiJours > filters.delaiMax)) return false;
+    if (filters.delaiMax !== undefined) {
+      const dj = numericDelaiJours(ao.delaiJours);
+      if (dj === null || dj < 0 || dj > filters.delaiMax) return false;
+    }
     return true;
   });
 }
 
 export function sortByDelay(records: AoRecord[]): AoRecord[] {
-  return [...records].sort((a, b) => (a.delaiJours ?? 999) - (b.delaiJours ?? 999));
+  return [...records].sort((a, b) => (numericDelaiJours(a.delaiJours) ?? 999) - (numericDelaiJours(b.delaiJours) ?? 999));
 }

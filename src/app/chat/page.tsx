@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/ao";
+
+export const dynamic = "force-dynamic";
 import { requireUser } from "@/lib/auth";
 import { AppShell, type SideRailGroup } from "@/components/shell";
 import { delayLabel, urgentByDeadline } from "@/lib/aoDeadline";

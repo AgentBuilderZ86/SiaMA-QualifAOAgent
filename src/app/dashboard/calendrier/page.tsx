@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/ao";
+
+export const dynamic = "force-dynamic";
 import { requireUser } from "@/lib/auth";
 import { AppShell, PageHeader, Pill } from "@/components/shell";
 import { logoutAction, refreshAoSourcesAction } from "../actions";
