@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "smoke": "node scripts/smoke-dashboard.mjs",
-    "test": "npm run typecheck",
+    "test": "npm run typecheck && npm run test:unit",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -23,11 +25,13 @@
   },
   "devDependencies": {
     "@netlify/plugin-nextjs": "^5.15.11",
+    "@playwright/test": "^1.49.1",
     "@types/node": "latest",
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "netlify-cli": "^26.0.1",
-    "typescript": "latest"
+    "typescript": "latest",
+    "vitest": "^2.1.9"
   }
 }

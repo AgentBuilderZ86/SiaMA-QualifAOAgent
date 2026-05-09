@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/ao";
-
-export const dynamic = "force-dynamic";
 import { requireUser } from "@/lib/auth";
 import { AppShell, PageHeader, Pill, RecoBadge } from "@/components/shell";
-import { logoutAction, refreshAoSourcesAction } from "../actions";
-import { buildDashboardRail } from "../dashboardRail";
 import { urgentByDeadline } from "@/lib/aoDeadline";
+import { logoutAction, refreshAoSourcesAction } from "../actions";
+import { DashboardMobileFilters } from "../DashboardMobileFilters";
 import { dashboardPathWithFilters, filterDashboardRecords, parsePipelineFilters } from "../dashboardFilters";
+import { buildDashboardRail } from "../dashboardRail";
+
+export const dynamic = "force-dynamic";
 
 type SP = Record<string, string | string[] | undefined>;
 
@@ -54,6 +55,8 @@ export default async function DashboardStatsPage({ searchParams }: { searchParam
           </>
         }
       />
+
+      <DashboardMobileFilters data={data} active="stats" filters={filters} />
 
       <div className="kpi-strip" style={{ marginBottom: 18 }}>
         <div className="kpi active">

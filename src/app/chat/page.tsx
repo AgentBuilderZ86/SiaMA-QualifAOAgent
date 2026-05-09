@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/ao";
-
-export const dynamic = "force-dynamic";
 import { requireUser } from "@/lib/auth";
 import { AppShell, type SideRailGroup } from "@/components/shell";
 import { delayLabel, urgentByDeadline } from "@/lib/aoDeadline";
 import type { AoRecord } from "@/lib/aoTypes";
+
+export const dynamic = "force-dynamic";
 
 const PIPELINE_DISPLAY_LIMIT = 4;
 

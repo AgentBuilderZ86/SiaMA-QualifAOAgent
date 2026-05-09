@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/ao";
-
-export const dynamic = "force-dynamic";
 import { requireUser } from "@/lib/auth";
 import { AppShell, PageHeader, Pill } from "@/components/shell";
-import { logoutAction, refreshAoSourcesAction } from "../actions";
-import { buildDashboardRail } from "../dashboardRail";
-import { filterDashboardRecords, parsePipelineFilters } from "../dashboardFilters";
 import { delayLabel } from "@/lib/aoDeadline";
+import { logoutAction, refreshAoSourcesAction } from "../actions";
+import { DashboardMobileFilters } from "../DashboardMobileFilters";
+import { filterDashboardRecords, parsePipelineFilters } from "../dashboardFilters";
+import { buildDashboardRail } from "../dashboardRail";
+
+export const dynamic = "force-dynamic";
 
 function delayClass(jours: number | null | undefined): string {
   if (typeof jours !== "number") return "";
@@ -56,6 +57,8 @@ export default async function DashboardCalendrierPage({ searchParams }: { search
           </>
         }
       />
+
+      <DashboardMobileFilters data={data} active="calendrier" filters={filters} />
 
       <section className="card section">
         <div className="pipe-wrap">

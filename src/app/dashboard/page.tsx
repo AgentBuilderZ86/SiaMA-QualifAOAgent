@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/ao";
-
-/** Données AO toujours fraîches (évite un HTML « urgents » ou délais obsolètes servi depuis le cache CDN). */
-export const dynamic = "force-dynamic";
 import { requireUser } from "@/lib/auth";
+import { delayLabel, numericDelaiJours, urgentByDeadline } from "@/lib/aoDeadline";
 import { logoutAction, refreshAoSourcesAction } from "./actions";
 import { AppShell, PageHeader, Pill, RecoBadge } from "@/components/shell";
 import {
   dashboardPathWithFilters,
   filterDashboardRecords,
+  groupRecordsByManager,
   parsePipelineFilters,
   patchPipelineFilters,
   sortByDelay,
@@ -16,7 +15,9 @@ import {
 } from "./dashboardFilters";
 import { buildDashboardRail } from "./dashboardRail";
 import { DashboardClientSearchForm } from "./DashboardExtendFilter";
-import { delayLabel } from "@/lib/aoDeadline";
+import { DashboardMobileFilters } from "./DashboardMobileFilters";
+
+export const dynamic = "force-dynamic";
 
 type DashSearchParams = Record<string, string | string[] | undefined>;
 
@@ -121,7 +122,7 @@ function PipelineKanban({ records }: { records: DashboardAo[] }) {
               <strong>{items.length}</strong>
             </div>
             {items
-              .sort((a, b) => (a.delaiJours ?? 999) - (b.delaiJours ?? 999))
+              .sort((a, b) => (numericDelaiJours(a.delaiJours) ?? 999) - (numericDelaiJours(b.delaiJours) ?? 999))
               .slice(0, 5)
               .map((ao) => (
                 <Link
@@ -149,7 +150,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const data = await getDashboardData();
   const filters = parsePipelineFilters(await searchParams);
 
-  const filteredPipeline = sortByDelay(filterDashboardRecords(data.records, filters)).slice(0, 20);
+  const scopedRecords = filterDashboardRecords(data.records, filters);
+  const filteredPipeline = sortByDelay(scopedRecords).slice(0, 20);
+  const scopedUrgent = sortByDelay(scopedRecords.filter(urgentByDeadline)).slice(0, 12);
+  const scopedByManager = groupRecordsByManager(scopedRecords).slice(0, 8);
 
   const generatedAt = new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "medium",
@@ -255,6 +259,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </section>
       ) : (
         <>
+          <DashboardMobileFilters data={data} active="pipeline" filters={filters} />
+
           {/* KPI strip dark — liens vers filtres par statut */}
           <div className="kpi-strip">
             <Link
@@ -474,6 +480,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <div className="card section">
               <p className="eyebrow">Vigilance délai</p>
               <h2>AOs urgents (≤ 7 jours)</h2>
+              {hasAnyFilter ? (
+                <p className="t-meta" style={{ marginTop: 6 }}>
+                  Sous-ensemble après filtres URL · {scopedRecords.length} AO(s) dans la vue
+                </p>
+              ) : null}
               <div className="pipe-wrap" style={{ marginTop: 12 }}>
                 <table className="pipe">
                   <thead>
@@ -484,7 +495,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     </tr>
                   </thead>
                   <tbody>
-                    {data.urgent.map((ao, index) => (
+                    {scopedUrgent.map((ao, index) => (
                       <tr key={`urgent-${ao.aoNum}-${index}`}>
                         <td>
                           <Pill status={ao.statut} />
@@ -502,7 +513,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         </td>
                       </tr>
                     ))}
-                    {data.urgent.length === 0 ? (
+                    {scopedUrgent.length === 0 ? (
                       <tr>
                         <td colSpan={3} className="muted">
                           Aucun délai critique dans les données chargées.
@@ -517,6 +528,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <div className="card section">
               <p className="eyebrow">Charge équipe</p>
               <h2>Charge par manager</h2>
+              {hasAnyFilter ? (
+                <p className="t-meta" style={{ marginTop: 6 }}>
+                  Répartition sur les AO visibles après filtres (pas le périmètre global).
+                </p>
+              ) : null}
               <div className="pipe-wrap" style={{ marginTop: 12 }}>
                 <table className="pipe">
                   <thead>
@@ -528,7 +544,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     </tr>
                   </thead>
                   <tbody>
-                    {data.byManager.map((item) => (
+                    {scopedByManager.map((item) => (
                       <tr key={item.manager}>
                         <td>
                           <div className="mgr-cell">
@@ -541,7 +557,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         <td className="num">{item.urgent}</td>
                       </tr>
                     ))}
-                    {data.byManager.length === 0 ? (
+                    {scopedByManager.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="muted">
                           Aucun manager renseigné.
@@ -558,7 +574,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <details className="collapsible-panel" style={{ marginTop: 16 }}>
             <summary>Vue par phase · pipeline kanban</summary>
             <div style={{ marginTop: 14 }}>
-              <PipelineKanban records={data.records} />
+              <PipelineKanban records={scopedRecords} />
             </div>
           </details>
 

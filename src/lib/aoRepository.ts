@@ -22,6 +22,7 @@ import {
 } from "@/lib/aoTypes";
 import { readAoCache } from "@/lib/aoSources/cache";
 import { collectedAoToRecord } from "@/lib/aoSources/normalize";
+import { buildPipelineByAoLookup, mergeScrapedWithPipeline, mergeSourcesWithPipelineTab, normalizeAoLookupKey } from "@/lib/aoMergeForDashboard";
 
 const tabs = {
   aq: process.env.SHEET_AQ || "A qualifier vs qualifié",
@@ -108,9 +109,42 @@ export class GoogleSheetsAoRepository {
     return groups.flat().filter((ao) => ao.aoNum && ao.aoNum !== "NC");
   }
 
+  /** Onglets AQ / EC / NG uniquement (sans doublon avec l’onglet pipeline). */
+  async listSourceSheetAos(): Promise<AoRecord[]> {
+    if (!getSheetsConfigStatus().configured) return [];
+    const groups = await Promise.all(
+      sourceTabs.map(async (tab) => {
+        try {
+          const { records } = await readSheetWithMeta(tab.name);
+          return records.map((row) => sheetRecordToAo(row, tab.name, tab.fallback));
+        } catch {
+          return [];
+        }
+      })
+    );
+    return groups.flat().filter((ao) => ao.aoNum && ao.aoNum !== "NC");
+  }
+
+  async listPipelineTabAos(): Promise<AoRecord[]> {
+    if (!getSheetsConfigStatus().configured) return [];
+    try {
+      const { records } = await readSheetWithMeta(tabs.pipeline);
+      return records.map((row) => sheetRecordToAo(row, tabs.pipeline, "AUTRE")).filter((ao) => ao.aoNum && ao.aoNum !== "NC");
+    } catch {
+      return [];
+    }
+  }
+
   async listGroupedAos(): Promise<{ googleSheet: AoRecord[]; scraped: AoRecord[]; combined: AoRecord[] }> {
-    const [native, googleSheet] = await Promise.all([this.listNativeAos(), this.listSheetAos()]);
-    const scraped = dedupeNativeAgainstSheet(native, googleSheet);
+    const [native, sourceRows, pipelineRows] = await Promise.all([
+      this.listNativeAos(),
+      this.listSourceSheetAos(),
+      this.listPipelineTabAos()
+    ]);
+    const pipelineByKey = buildPipelineByAoLookup(pipelineRows);
+    const googleSheet = mergeSourcesWithPipelineTab(sourceRows, pipelineRows);
+    const scrapedRaw = dedupeNativeAgainstSheet(native, googleSheet);
+    const scraped = mergeScrapedWithPipeline(scrapedRaw, pipelineByKey);
     return {
       googleSheet,
       scraped,
@@ -146,9 +180,20 @@ export class GoogleSheetsAoRepository {
 
   async findAo(aoNum: string): Promise<AoRecord | null> {
     const normalized = String(aoNum).trim();
+    const key = normalizeAoLookupKey(normalized);
     const { googleSheet, scraped } = await this.listGroupedAos();
+    const list = [...googleSheet, ...scraped];
     const source =
-      [...googleSheet, ...scraped].find((ao) => ao.aoNum === normalized || ao.displayAoNum === normalized) ?? null;
+      list.find((ao) => ao.aoNum === normalized || ao.displayAoNum === normalized) ??
+      (key
+        ? list.find(
+            (ao) =>
+              normalizeAoLookupKey(ao.aoNum) === key ||
+              normalizeAoLookupKey(ao.displayAoNum) === key ||
+              decodeURIComponent(normalized) === ao.aoNum
+          )
+        : null) ??
+      null;
     const pipelineRow = await this.getPipelineRecord(normalized).catch(() => null);
     const pipeline = pipelineRow ? sheetRecordToAo(pipelineRow, tabs.pipeline, "AUTRE") : null;
     return mergeAoRecords(source, pipeline);

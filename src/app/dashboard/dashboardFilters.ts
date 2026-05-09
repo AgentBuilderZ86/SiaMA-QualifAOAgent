@@ -2,8 +2,22 @@
  * Filtres du pipeline (/dashboard…) via query string : statuts, manager, client, reco, délai max.
  */
 
-import { numericDelaiJours } from "@/lib/aoDeadline";
+import { numericDelaiJours, urgentByDeadline } from "@/lib/aoDeadline";
 import type { AoRecord } from "@/lib/aoTypes";
+
+/** Clé de comparaison manager (casse, accents, espaces). */
+export function normalizeManagerKey(name: string | undefined | null): string {
+  return String(name ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+export function managersMatch(aoManager: string | undefined, filterManager: string | undefined): boolean {
+  if (!filterManager?.trim()) return true;
+  return normalizeManagerKey(aoManager) === normalizeManagerKey(filterManager);
+}
 
 export type DashboardRecoFilter = "go" | "watch" | "nogo";
 
@@ -103,7 +117,7 @@ function matchesReco(ao: AoRecord, reco: DashboardRecoFilter | undefined): boole
 export function filterDashboardRecords(records: AoRecord[], filters: DashboardPipelineFilters): AoRecord[] {
   return records.filter((ao) => {
     if (filters.statuts.length && !filters.statuts.includes(ao.statut)) return false;
-    if (filters.manager && (ao.manager || "").trim() !== filters.manager.trim()) return false;
+    if (filters.manager && !managersMatch(ao.manager, filters.manager)) return false;
     if (filters.client) {
       const q = filters.client.toLowerCase();
       const hay = `${ao.client || ""} ${ao.sujet || ""}`.toLowerCase();
@@ -120,4 +134,18 @@ export function filterDashboardRecords(records: AoRecord[], filters: DashboardPi
 
 export function sortByDelay(records: AoRecord[]): AoRecord[] {
   return [...records].sort((a, b) => (numericDelaiJours(a.delaiJours) ?? 999) - (numericDelaiJours(b.delaiJours) ?? 999));
+}
+
+/** Répartition charge manager (même logique que le serveur, appliquée à un sous-ensemble filtré). */
+export function groupRecordsByManager(records: AoRecord[]) {
+  const groups = new Map<string, AoRecord[]>();
+  records.forEach((ao) => groups.set(ao.manager, [...(groups.get(ao.manager) ?? []), ao]));
+  return [...groups.entries()]
+    .map(([manager, aos]) => ({
+      manager,
+      total: aos.length,
+      go: aos.filter((ao) => ao.statut === "GO").length,
+      urgent: aos.filter(urgentByDeadline).length
+    }))
+    .sort((a, b) => b.total - a.total);
 }
