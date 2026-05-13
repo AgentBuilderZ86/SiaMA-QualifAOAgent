@@ -142,7 +142,7 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
               <QualificationIntelligenceView
                 fiche={qualification}
                 ao={ao}
-                deckHref={`/ao/${aoHref}/qualification/deck`}
+                deckUrlBase={`/ao/${aoHref}/qualification/deck`}
                 htmlHref={`/ao/${aoHref}/qualification/fiche.html`}
               />
             </div>

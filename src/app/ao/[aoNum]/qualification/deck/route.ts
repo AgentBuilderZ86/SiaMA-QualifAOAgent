@@ -45,7 +45,13 @@ function fallbackFiche(ao: AoRecord): QualificationFiche {
   };
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ aoNum: string }> }) {
+function forcedEngineFromRequest(request: Request): "python" | "pptxgen" | null {
+  const raw = new URL(request.url).searchParams.get("engine");
+  if (raw === "python" || raw === "pptxgen") return raw;
+  return null;
+}
+
+export async function GET(request: Request, { params }: { params: Promise<{ aoNum: string }> }) {
   await requireUser();
   const { aoNum } = await params;
   const detail = await getAoDetail(decodeURIComponent(aoNum));
@@ -53,13 +59,29 @@ export async function GET(_request: Request, { params }: { params: Promise<{ aoN
 
   const fiche = parseJson<QualificationFiche>(detail.pipeline?.["Fiche qualification"]) || fallbackFiche(detail.ao);
   const intelligence = fiche.intelligence || buildFallbackIntelligence(detail.ao, fiche, [], ["Analyse IA indisponible ou ancienne."]);
-  const engine = deckEngineFromEnv();
+  const forced = forcedEngineFromRequest(request);
+  const envEngine = deckEngineFromEnv();
   const payload = buildAoDeckPayload(detail.ao, detail.pipeline, detail.referentials);
 
   let buffer: Buffer;
-  if (engine === "pptxgen") {
+  let fileStem = `qualification-${detail.ao.displayAoNum}`;
+
+  if (forced === "python") {
+    const fromPython = await runPythonQualificationDeck(payload);
+    if (!fromPython) {
+      return NextResponse.json(
+        { error: "Génération deck Python indisponible (Python, python-pptx ou template)." },
+        { status: 503 }
+      );
+    }
+    buffer = fromPython;
+    fileStem = `${fileStem}-modele-sia`;
+  } else if (forced === "pptxgen") {
     buffer = await buildQualificationDeck(detail.ao, fiche, intelligence);
-  } else if (engine === "python") {
+    fileStem = `${fileStem}-charte-web`;
+  } else if (envEngine === "pptxgen") {
+    buffer = await buildQualificationDeck(detail.ao, fiche, intelligence);
+  } else if (envEngine === "python") {
     const fromPython = await runPythonQualificationDeck(payload);
     if (!fromPython) {
       return NextResponse.json(
@@ -77,7 +99,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ aoN
   return new NextResponse(body, {
     headers: {
       "content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      "content-disposition": `attachment; filename="${fileName(`qualification-${detail.ao.displayAoNum}`)}.pptx"`
+      "content-disposition": `attachment; filename="${fileName(fileStem)}.pptx"`
     }
   });
 }
