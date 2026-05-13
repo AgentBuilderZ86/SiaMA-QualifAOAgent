@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import path from "node:path";
 import { getAoDetail } from "@/lib/ao";
 import { requireUser } from "@/lib/auth";
 import type { AoRecord, QualificationFiche } from "@/lib/aoTypes";
-import { buildFallbackIntelligence } from "@/lib/qualification/intelligence";
+import { buildAoDeckPayload } from "@/lib/pptx/aoDeckData";
 import { buildQualificationDeck } from "@/lib/pptx/qualificationDeck";
+import { deckEngineFromEnv, runPythonQualificationDeck } from "@/lib/pptx/runPythonDeck";
+import { buildFallbackIntelligence } from "@/lib/qualification/intelligence";
 
 export const runtime = "nodejs";
 
@@ -52,7 +53,26 @@ export async function GET(_request: Request, { params }: { params: Promise<{ aoN
 
   const fiche = parseJson<QualificationFiche>(detail.pipeline?.["Fiche qualification"]) || fallbackFiche(detail.ao);
   const intelligence = fiche.intelligence || buildFallbackIntelligence(detail.ao, fiche, [], ["Analyse IA indisponible ou ancienne."]);
-  const buffer = await buildQualificationDeck(detail.ao, fiche, intelligence);
+  const engine = deckEngineFromEnv();
+  const payload = buildAoDeckPayload(detail.ao, detail.pipeline, detail.referentials);
+
+  let buffer: Buffer;
+  if (engine === "pptxgen") {
+    buffer = await buildQualificationDeck(detail.ao, fiche, intelligence);
+  } else if (engine === "python") {
+    const fromPython = await runPythonQualificationDeck(payload);
+    if (!fromPython) {
+      return NextResponse.json(
+        { error: "Génération deck Python indisponible (Python, python-pptx ou template)." },
+        { status: 503 }
+      );
+    }
+    buffer = fromPython;
+  } else {
+    const fromPython = await runPythonQualificationDeck(payload);
+    buffer = fromPython ?? (await buildQualificationDeck(detail.ao, fiche, intelligence));
+  }
+
   const body = new Uint8Array(buffer);
   return new NextResponse(body, {
     headers: {

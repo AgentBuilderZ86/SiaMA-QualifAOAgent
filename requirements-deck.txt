@@ -1,0 +1,2 @@
+# Dépendances pour scripts/generate_ao_ppt.py (deck qualification téléchargé en mode Python).
+python-pptx>=0.6.21,<2
