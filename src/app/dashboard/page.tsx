@@ -16,6 +16,7 @@ import {
 import { buildDashboardRail } from "./dashboardRail";
 import { DashboardClientSearchForm } from "./DashboardExtendFilter";
 import { DashboardMobileFilters } from "./DashboardMobileFilters";
+import { RefreshSourcesFlash } from "./RefreshSourcesFlash";
 
 export const dynamic = "force-dynamic";
 
@@ -148,7 +149,8 @@ function PipelineKanban({ records }: { records: DashboardAo[] }) {
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<DashSearchParams> }) {
   const user = await requireUser();
   const data = await getDashboardData();
-  const filters = parsePipelineFilters(await searchParams);
+  const sp = await searchParams;
+  const filters = parsePipelineFilters(sp);
 
   const scopedRecords = filterDashboardRecords(data.records, filters);
   const filteredPipeline = sortByDelay(scopedRecords).slice(0, 20);
@@ -235,6 +237,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </>
         }
       />
+
+      <RefreshSourcesFlash searchParams={sp} />
 
       {!data.configured ? (
         <section className="card section">

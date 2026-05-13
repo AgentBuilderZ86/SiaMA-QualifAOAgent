@@ -7,6 +7,7 @@ import { logoutAction, refreshAoSourcesAction } from "../actions";
 import { DashboardMobileFilters } from "../DashboardMobileFilters";
 import { dashboardPathWithFilters, filterDashboardRecords, parsePipelineFilters } from "../dashboardFilters";
 import { buildDashboardRail } from "../dashboardRail";
+import { RefreshSourcesFlash } from "../RefreshSourcesFlash";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,8 @@ type SP = Record<string, string | string[] | undefined>;
 export default async function DashboardStatsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const user = await requireUser();
   const data = await getDashboardData();
-  const filters = parsePipelineFilters(await searchParams);
+  const sp = await searchParams;
+  const filters = parsePipelineFilters(sp);
   const rail = buildDashboardRail(data, "stats", filters);
 
   const scoped = filterDashboardRecords(data.records, filters);
@@ -55,6 +57,8 @@ export default async function DashboardStatsPage({ searchParams }: { searchParam
           </>
         }
       />
+
+      <RefreshSourcesFlash searchParams={sp} />
 
       <DashboardMobileFilters data={data} active="stats" filters={filters} />
 

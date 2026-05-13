@@ -7,6 +7,7 @@ import { logoutAction, refreshAoSourcesAction } from "../actions";
 import { DashboardMobileFilters } from "../DashboardMobileFilters";
 import { filterDashboardRecords, parsePipelineFilters } from "../dashboardFilters";
 import { buildDashboardRail } from "../dashboardRail";
+import { RefreshSourcesFlash } from "../RefreshSourcesFlash";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,8 @@ type SP = Record<string, string | string[] | undefined>;
 export default async function DashboardCalendrierPage({ searchParams }: { searchParams: Promise<SP> }) {
   const user = await requireUser();
   const data = await getDashboardData();
-  const filters = parsePipelineFilters(await searchParams);
+  const sp = await searchParams;
+  const filters = parsePipelineFilters(sp);
   const rail = buildDashboardRail(data, "calendrier", filters);
 
   const scoped = filterDashboardRecords(data.records, filters);
@@ -57,6 +59,8 @@ export default async function DashboardCalendrierPage({ searchParams }: { search
           </>
         }
       />
+
+      <RefreshSourcesFlash searchParams={sp} />
 
       <DashboardMobileFilters data={data} active="calendrier" filters={filters} />
 
