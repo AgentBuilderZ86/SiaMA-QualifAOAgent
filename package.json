@@ -21,7 +21,8 @@
     "pdf-parse": "^1.1.1",
     "pptxgenjs": "^4.0.1",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@netlify/plugin-nextjs": "^5.15.11",

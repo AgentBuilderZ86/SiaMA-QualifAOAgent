@@ -15,7 +15,7 @@ export default async function PitchPage({ params }: { params: Promise<{ aoNum: s
   const aoHref = encodeURIComponent(ao.aoNum);
 
   return (
-    <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "pitch")}>
+    <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "pitch", ao.statut)}>
       <PageHeader
         eyebrow={
           <>

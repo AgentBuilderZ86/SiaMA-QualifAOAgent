@@ -310,6 +310,7 @@ export const PIPELINE_HEADERS = [
   "Simulation financière",
   "Recommandation",
   "Sections propale",
+  "Atelier stratégie",
   "Run ID création",
   "Pitch notes",
   "Résultat clôture",

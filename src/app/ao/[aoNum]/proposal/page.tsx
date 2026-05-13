@@ -18,7 +18,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ aoNum
   const proposal = parseJsonField(pipeline?.["Sections propale"]);
 
   return (
-    <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "proposal")}>
+    <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "proposal", ao.statut)}>
       <PageHeader
         eyebrow={
           <>

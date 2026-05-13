@@ -29,7 +29,7 @@ export default async function QualificationPage({ params }: { params: Promise<{ 
   const aoHref = encodeURIComponent(ao.aoNum);
 
   return (
-    <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "qualification")}>
+    <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "qualification", ao.statut)}>
       <PageHeader
         eyebrow={
           <>

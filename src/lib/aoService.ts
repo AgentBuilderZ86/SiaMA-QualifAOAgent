@@ -1,13 +1,27 @@
 import { aoRepository } from "@/lib/aoRepository";
+import {
+  ATELIER_STRATEGIE_COLUMN,
+  appendWorkshopMessages,
+  atelierCommitPayloadSchema,
+  extractDraftFromAssistant,
+  mergeLastDraft,
+  parseAtelierStrategie,
+  serializeAtelierStrategie,
+  stripDraftMarkerForDisplay,
+  type AtelierCommitPayload
+} from "@/lib/atelierStrategie";
+import { buildAtelierSystemPrompt, buildAtelierUserPayload } from "@/lib/atelierPrompt";
 import { extractDocumentSections, extractUploadedDocument, summarizeDocumentText } from "@/lib/documents";
 import { extractKeyMetadata, isPlaceholderSection } from "@/lib/qualification/documentMetadata";
 import { filenameSignalsPrefix, parseFilenameSignals } from "@/lib/qualification/filenameSignals";
 import { simulateFinancials } from "@/lib/finance";
 import { generateProposalSection, generateQualificationRecommendation } from "@/lib/llm";
+import { completeChat, hasConfiguredLlm } from "@/lib/llmChat";
 import { getSheetsConfigStatus } from "@/lib/google";
 import { readAoCache } from "@/lib/aoSources/cache";
 import { generateIntelligentQualification } from "@/lib/qualification/intelligence";
 import { operationalDeadlineSubset, urgentByDeadline } from "@/lib/aoDeadline";
+import type { SheetRow } from "@/lib/google";
 import type { AoRecord, AoStatus, ClosureReport, FinancialSimulation, QualificationFiche } from "@/lib/aoTypes";
 
 export type DashboardData = {
@@ -278,5 +292,139 @@ export async function closeAo(aoNum: string, actor: string, report: ClosureRepor
     "Concurrent retenu": report.competitor,
     "Motif clôture": report.reason,
     "Leçons apprises": report.lessons
+  });
+}
+
+const ATELIER_STATUTS: AoStatus[] = ["BO", "P2P"];
+const ATELIER_USER_MSG_MAX = 8000;
+
+function assertAtelierPhase(ao: AoRecord) {
+  if (!ATELIER_STATUTS.includes(ao.statut)) {
+    throw new Error("L'atelier stratégie est réservé aux AO en phase BO ou P2P.");
+  }
+}
+
+export function atelierStrategieFromPipeline(pipeline: SheetRow | null | undefined) {
+  const raw = pipeline?.[ATELIER_STRATEGIE_COLUMN];
+  return parseAtelierStrategie(typeof raw === "string" ? raw : undefined);
+}
+
+export async function runAtelierChat(aoNum: string, actorEmail: string, newUserMessage: string) {
+  const trimmed = newUserMessage.trim();
+  if (!trimmed) throw new Error("Message vide.");
+  if (trimmed.length > ATELIER_USER_MSG_MAX) {
+    throw new Error(`Message trop long (max ${ATELIER_USER_MSG_MAX} caractères).`);
+  }
+  if (!hasConfiguredLlm()) {
+    throw new Error("Aucun fournisseur LLM configuré (clés API).");
+  }
+  const ao = await aoRepository.findAo(aoNum);
+  if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
+  assertAtelierPhase(ao);
+  const pipeline = await aoRepository.getPipelineRecord(ao.aoNum);
+  const referentials = await aoRepository.readReferentials();
+  let state = parseAtelierStrategie(typeof pipeline?.[ATELIER_STRATEGIE_COLUMN] === "string" ? pipeline[ATELIER_STRATEGIE_COLUMN] : undefined);
+  state = appendWorkshopMessages(state, [{ role: "user", content: trimmed }], actorEmail);
+  const ficheQualifJson = typeof pipeline?.["Fiche qualification"] === "string" ? pipeline["Fiche qualification"] : "{}";
+  const simulationJson = typeof pipeline?.["Simulation financière"] === "string" ? pipeline["Simulation financière"] : "{}";
+  const userPayload = buildAtelierUserPayload({
+    ao,
+    ficheQualifJson,
+    simulationJson,
+    referentials,
+    state
+  });
+  const maxOut = Math.min(
+    Math.max(parseInt(process.env.LLM_MAX_OUTPUT_TOKENS || "8192", 10), 2048),
+    32_000
+  );
+  const assistantRaw = await completeChat({
+    system: buildAtelierSystemPrompt(),
+    user: userPayload,
+    temperature: 0.25,
+    maxOutputTokens: maxOut
+  });
+  if (!assistantRaw?.trim()) {
+    throw new Error("Réponse LLM vide ou indisponible.");
+  }
+  const draft = extractDraftFromAssistant(assistantRaw);
+  const assistantDisplay = stripDraftMarkerForDisplay(assistantRaw).slice(0, 24_000);
+  state = appendWorkshopMessages(state, [{ role: "assistant", content: assistantDisplay }], actorEmail);
+  if (draft) {
+    state = mergeLastDraft(state, draft);
+  }
+  await aoRepository.upsertPipeline(ao, ao.statut, {
+    [ATELIER_STRATEGIE_COLUMN]: serializeAtelierStrategie(state)
+  });
+  return { messages: state.messages, lastDraft: state.lastDraft };
+}
+
+export async function commitAtelierDraft(aoNum: string, actor: string, payload: AtelierCommitPayload) {
+  const parsed = atelierCommitPayloadSchema.safeParse(payload);
+  if (!parsed.success) {
+    throw new Error("Données de validation invalides.");
+  }
+  const p = parsed.data;
+  const hasField =
+    Boolean(p.budgetTtcPropose?.trim()) ||
+    Boolean(p.strategieResume?.trim()) ||
+    Boolean(p.equipeChiffrageNarratif?.trim()) ||
+    Boolean(p.sectionsPropaleCibles?.length) ||
+    Boolean(p.recommandation?.trim()) ||
+    Boolean(p.appendNote?.trim());
+  if (!hasField) {
+    throw new Error("Aucun champ à enregistrer : renseignez au moins une valeur.");
+  }
+  const ao = await aoRepository.findAo(aoNum);
+  if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
+  assertAtelierPhase(ao);
+  const pipeline = await aoRepository.getPipelineRecord(ao.aoNum);
+  const referentials = await aoRepository.readReferentials();
+  const updates: Record<string, string> = {};
+  const nowIso = new Date().toISOString();
+
+  if (p.budgetTtcPropose?.trim()) {
+    const b = p.budgetTtcPropose.trim();
+    updates.Budget = b;
+    const sim = simulateFinancials(b, referentials);
+    updates["Simulation financière"] = JSON.stringify(sim);
+  }
+  if (p.recommandation?.trim()) {
+    updates.Recommandation = p.recommandation.trim();
+  }
+
+  const noteBlocks: string[] = [];
+  if (p.appendNote?.trim()) noteBlocks.push(p.appendNote.trim());
+  if (p.strategieResume?.trim()) {
+    noteBlocks.push(`[Atelier ${nowIso}] Stratégie :\n${p.strategieResume.trim()}`);
+  }
+  if (p.equipeChiffrageNarratif?.trim()) {
+    noteBlocks.push(`[Atelier ${nowIso}] Équipe / chiffrage :\n${p.equipeChiffrageNarratif.trim()}`);
+  }
+  if (p.sectionsPropaleCibles?.length) {
+    noteBlocks.push(`[Atelier ${nowIso}] Sections propale cibles : ${p.sectionsPropaleCibles.join(", ")}`);
+  }
+  if (noteBlocks.length) {
+    const prev = typeof pipeline?.Notes === "string" ? pipeline.Notes.trim() : "";
+    updates.Notes = [prev, ...noteBlocks].filter(Boolean).join("\n\n---\n");
+  }
+
+  let state = parseAtelierStrategie(typeof pipeline?.[ATELIER_STRATEGIE_COLUMN] === "string" ? pipeline[ATELIER_STRATEGIE_COLUMN] : undefined);
+  state = {
+    ...state,
+    updatedAt: nowIso,
+    lastDraft: undefined,
+    committedAt: nowIso
+  };
+  updates[ATELIER_STRATEGIE_COLUMN] = serializeAtelierStrategie(state);
+
+  await aoRepository.upsertPipeline(ao, ao.statut, updates);
+  await aoRepository.appendHistory({
+    timestamp: nowIso,
+    aoNum,
+    fromStatus: ao.statut,
+    toStatus: ao.statut,
+    actor,
+    note: "Validation atelier stratégie (mise à jour fiche opportunité)"
   });
 }

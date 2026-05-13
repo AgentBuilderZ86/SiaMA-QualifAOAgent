@@ -4,14 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   closeAo,
+  commitAtelierDraft,
   savePitchNotes,
   saveProposalSection,
   saveQualification,
   saveSimulation,
-  transitionAo
+  transitionAo,
+  runAtelierChat
 } from "@/lib/ao";
 import { requireUser } from "@/lib/auth";
 import type { AoStatus } from "@/lib/ao";
+import type { AtelierCommitPayload, AtelierLastDraft } from "@/lib/atelierStrategie";
 
 function pathFor(aoNum: string) {
   return `/ao/${encodeURIComponent(aoNum)}`;
@@ -81,4 +84,39 @@ export async function closureAction(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath(pathFor(aoNum));
   redirect(pathFor(aoNum));
+}
+
+export type AtelierChatActionResult =
+  | { ok: true; messages: Array<{ role: "user" | "assistant"; content: string; at: string }>; lastDraft?: AtelierLastDraft }
+  | { ok: false; error: string };
+
+export async function atelierChatAction(aoNum: string, newUserMessage: string): Promise<AtelierChatActionResult> {
+  try {
+    const actor = await requireUser();
+    const out = await runAtelierChat(aoNum, actor, newUserMessage);
+    const p = pathFor(aoNum);
+    revalidatePath(p);
+    revalidatePath(`${p}/atelier-reponse`);
+    revalidatePath("/dashboard");
+    return { ok: true, messages: out.messages, lastDraft: out.lastDraft };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erreur inconnue" };
+  }
+}
+
+export type AtelierCommitActionResult = { ok: true } | { ok: false; error: string };
+
+export async function atelierCommitAction(aoNum: string, payload: AtelierCommitPayload): Promise<AtelierCommitActionResult> {
+  try {
+    const actor = await requireUser();
+    await commitAtelierDraft(aoNum, actor, payload);
+    const p = pathFor(aoNum);
+    revalidatePath(p);
+    revalidatePath(`${p}/atelier-reponse`);
+    revalidatePath(`${p}/proposal`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erreur inconnue" };
+  }
 }

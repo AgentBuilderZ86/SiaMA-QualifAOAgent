@@ -6,8 +6,9 @@ import { FinancialSimulationView, parseJsonField, ProposalSectionView } from "./
 import { QualificationIntelligenceView } from "./qualificationView";
 import { DecisionPanel } from "./decisionPanel";
 import { WorkflowFlow } from "./workflow";
-import { AppShell, PageHeader, Pill, type SideRailGroup } from "@/components/shell";
+import { AppShell, PageHeader, Pill } from "@/components/shell";
 import { delayLabel } from "@/lib/aoDeadline";
+import { buildAoRail } from "./aoRail";
 
 export const dynamic = "force-dynamic";
 
@@ -41,29 +42,8 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
   const simulation = parseJsonField(pipeline?.["Simulation financière"]);
   const proposal = parseJsonField(pipeline?.["Sections propale"]);
 
-  const rail: SideRailGroup[] = [
-    {
-      title: "AO en cours",
-      items: [
-        { label: "📋 Vue d'ensemble", href: `/ao/${aoHref}`, active: true },
-        { label: "📑 Qualification", href: `/ao/${aoHref}/qualification` },
-        { label: "💰 Simulation & propale", href: `/ao/${aoHref}/proposal` },
-        { label: "🎤 Pitch", href: `/ao/${aoHref}/pitch` },
-        { label: "✅ Clôture", href: `/ao/${aoHref}/closure` }
-      ]
-    },
-    {
-      title: "Navigation",
-      items: [
-        { label: "📊 Pipeline", href: "/dashboard" },
-        { label: "💬 SiaGPT", href: "/chat" },
-        { label: "📋 Audit", href: "/audit" }
-      ]
-    }
-  ];
-
   return (
-    <AppShell user={user} product="AO Agent" rail={rail}>
+    <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "overview", ao.statut)}>
       <PageHeader
         eyebrow={<>AO <span className="ao-num">{ao.displayAoNum}</span></>}
         title={ao.client}

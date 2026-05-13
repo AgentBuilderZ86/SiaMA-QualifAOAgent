@@ -15,7 +15,7 @@ export default async function ClosurePage({ params }: { params: Promise<{ aoNum:
   const aoHref = encodeURIComponent(ao.aoNum);
 
   return (
-    <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "closure")}>
+    <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "closure", ao.statut)}>
       <PageHeader
         eyebrow={
           <>

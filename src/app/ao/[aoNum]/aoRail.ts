@@ -1,18 +1,29 @@
-import type { SideRailGroup } from "@/components/shell";
+import type { SideRailGroup, SideRailItem } from "@/components/shell";
 
-export type AoRailActive = "overview" | "qualification" | "proposal" | "pitch" | "closure";
+export type AoRailActive = "overview" | "qualification" | "proposal" | "atelier" | "pitch" | "closure";
 
-export function buildAoRail(aoHref: string, active: AoRailActive): SideRailGroup[] {
+export function buildAoRail(aoHref: string, active: AoRailActive, workflowStatut?: string): SideRailGroup[] {
+  const showAtelier = workflowStatut === "BO" || workflowStatut === "P2P";
+  const items: SideRailItem[] = [
+    { label: "📋 Vue d'ensemble", href: `/ao/${aoHref}`, active: active === "overview" },
+    { label: "📑 Qualification", href: `/ao/${aoHref}/qualification`, active: active === "qualification" },
+    { label: "💰 Simulation & propale", href: `/ao/${aoHref}/proposal`, active: active === "proposal" }
+  ];
+  if (showAtelier) {
+    items.push({
+      label: "🧭 Atelier réponse",
+      href: `/ao/${aoHref}/atelier-reponse`,
+      active: active === "atelier"
+    });
+  }
+  items.push(
+    { label: "🎤 Pitch", href: `/ao/${aoHref}/pitch`, active: active === "pitch" },
+    { label: "✅ Clôture", href: `/ao/${aoHref}/closure`, active: active === "closure" }
+  );
   return [
     {
       title: "AO en cours",
-      items: [
-        { label: "📋 Vue d'ensemble", href: `/ao/${aoHref}`, active: active === "overview" },
-        { label: "📑 Qualification", href: `/ao/${aoHref}/qualification`, active: active === "qualification" },
-        { label: "💰 Simulation & propale", href: `/ao/${aoHref}/proposal`, active: active === "proposal" },
-        { label: "🎤 Pitch", href: `/ao/${aoHref}/pitch`, active: active === "pitch" },
-        { label: "✅ Clôture", href: `/ao/${aoHref}/closure`, active: active === "closure" }
-      ]
+      items
     },
     {
       title: "Navigation",
