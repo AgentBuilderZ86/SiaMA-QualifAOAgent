@@ -13,4 +13,6 @@ export async function logoutAction() {
 export async function refreshAoSourcesAction() {
   await refreshAoCache();
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/calendrier");
+  revalidatePath("/dashboard/stats");
 }
