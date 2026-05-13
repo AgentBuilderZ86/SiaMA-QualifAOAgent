@@ -16,13 +16,17 @@ export async function refreshAoSourcesAction() {
   const h = await headers();
   const base = normalizeDashboardReturnPathFromReferer(h.get("referer"));
 
+  let errorMsg: string | null = null;
   try {
     await refreshAoCache();
   } catch (cause) {
-    const message = cause instanceof Error ? cause.message : "Échec du rafraîchissement des sources.";
-    console.error("[refreshAoSourcesAction]", message, cause);
+    errorMsg = cause instanceof Error ? cause.message : "Échec du rafraîchissement des sources.";
+    console.error("[refreshAoSourcesAction]", errorMsg, cause);
+  }
+
+  if (errorMsg !== null) {
     const sep = base.includes("?") ? "&" : "?";
-    redirect(`${base}${sep}refreshSources=error&refreshMsg=${encodeURIComponent(message.slice(0, 500))}`);
+    redirect(`${base}${sep}refreshSources=error&refreshMsg=${encodeURIComponent(errorMsg.slice(0, 500))}`);
   }
 
   revalidatePath("/dashboard");
