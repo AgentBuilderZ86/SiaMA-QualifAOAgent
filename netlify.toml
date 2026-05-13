@@ -6,6 +6,12 @@
   command = "npm run build"
   publish = ".next"
 
+# Scan de secrets : onglets Sheets / modèles publics / limites tokens = config, pas des clés API ;
+# .env.example et artefacts output ne doivent pas bloquer le build si alignés sur l’UI Netlify.
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "SHEET_AQ,SHEET_EC,SHEET_NG,SHEET_PIPELINE,OPENAI_MODEL,OPENAI_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_MAX_OUTPUT_TOKENS,LLM_MAX_OUTPUT_TOKENS,LLM_QUALIFICATION_MAX_TOKENS"
+  SECRETS_SCAN_OMIT_PATHS = ".env.example,output/**,scripts/__pycache__/**"
+
 ## Netlify detects Next.js and uses the Next runtime automatically.
 ## Keeping explicit plugin helps pin behavior across UI/CLI.
 [[plugins]]

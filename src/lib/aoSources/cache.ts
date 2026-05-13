@@ -10,28 +10,68 @@ const EMPTY_CACHE: AoCachePayload = {
   report: []
 };
 
-function cachePath() {
-  return process.env.AO_CACHE_PATH || path.join(process.cwd(), "data", "ao-cache.json");
+function bundledCachePath() {
+  return path.join(process.cwd(), "data", "ao-cache.json");
+}
+
+const TMP_CACHE = path.join("/tmp", "ao-cache.json");
+
+/** Cible d’écriture préférée (sans AO_CACHE_PATH : `data/` en local ; `NETLIFY=true` force `/tmp`). */
+function cacheWritePathPrimary() {
+  if (process.env.AO_CACHE_PATH?.trim()) return process.env.AO_CACHE_PATH.trim();
+  if (process.env.NETLIFY === "true") return TMP_CACHE;
+  return bundledCachePath();
+}
+
+/** Ordre de lecture : cache chaud (`/tmp`) puis snapshot versionné (`data/`). */
+function cacheReadCandidates(): string[] {
+  if (process.env.AO_CACHE_PATH?.trim()) return [process.env.AO_CACHE_PATH.trim()];
+  return [TMP_CACHE, bundledCachePath()];
+}
+
+function parseCachePayload(content: string): AoCachePayload {
+  const parsed = JSON.parse(content) as AoCachePayload;
+  return {
+    generatedAt: parsed.generatedAt || "",
+    records: Array.isArray(parsed.records) ? parsed.records : [],
+    report: Array.isArray(parsed.report) ? parsed.report : []
+  };
 }
 
 export async function readAoCache(): Promise<AoCachePayload> {
-  try {
-    const content = await fs.readFile(cachePath(), "utf8");
-    const parsed = JSON.parse(content) as AoCachePayload;
-    return {
-      generatedAt: parsed.generatedAt || "",
-      records: Array.isArray(parsed.records) ? parsed.records : [],
-      report: Array.isArray(parsed.report) ? parsed.report : []
-    };
-  } catch {
-    return EMPTY_CACHE;
+  for (const filePath of cacheReadCandidates()) {
+    try {
+      const content = await fs.readFile(filePath, "utf8");
+      return parseCachePayload(content);
+    } catch {
+      /* essayer le candidat suivant */
+    }
   }
+  return EMPTY_CACHE;
+}
+
+function isWriteRetryableErr(code: string | undefined) {
+  return code === "EACCES" || code === "EROFS" || code === "EPERM";
 }
 
 export async function writeAoCache(payload: AoCachePayload) {
-  const filePath = cachePath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  const body = `${JSON.stringify(payload, null, 2)}\n`;
+  const primary = cacheWritePathPrimary();
+  const candidates = primary === TMP_CACHE ? [TMP_CACHE] : [primary, TMP_CACHE];
+
+  for (let i = 0; i < candidates.length; i++) {
+    const filePath = candidates[i];
+    try {
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, body, "utf8");
+      return;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException)?.code;
+      const canRetry = isWriteRetryableErr(code) && i < candidates.length - 1;
+      if (canRetry) continue;
+      throw e;
+    }
+  }
 }
 
 export async function refreshAoCache(): Promise<AoCachePayload> {

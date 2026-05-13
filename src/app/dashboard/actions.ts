@@ -25,8 +25,12 @@ export async function refreshAoSourcesAction() {
     redirect(`${base}${sep}refreshSources=error&refreshMsg=${encodeURIComponent(message.slice(0, 500))}`);
   }
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/calendrier");
-  revalidatePath("/dashboard/stats");
+  try {
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/calendrier");
+    revalidatePath("/dashboard/stats");
+  } catch (revErr) {
+    console.error("[refreshAoSourcesAction] revalidatePath", revErr);
+  }
   redirect(base);
 }

@@ -4,14 +4,24 @@ import { cleanText, normalizeCollectedAo } from "@/lib/aoSources/normalize";
 export const DEFAULT_TIMEOUT_MS = 12_000;
 export const DEFAULT_MAX_RECORDS = 50;
 
+/** Timeout HTTP des connecteurs (Netlify : garder une marge sous la limite de la fonction serverless). */
+export function resolveFetchTimeoutMs(override?: number): number {
+  if (typeof override === "number" && Number.isFinite(override) && override > 0) return override;
+  const fromEnv = Number(process.env.AO_FETCH_TIMEOUT_MS);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  if (process.env.NETLIFY === "true") return 8_000;
+  return DEFAULT_TIMEOUT_MS;
+}
+
 export function maxRecords() {
   const configured = Number(process.env.AO_SOURCE_MAX_PER_SOURCE || DEFAULT_MAX_RECORDS);
   return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_MAX_RECORDS;
 }
 
-export async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+export async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs?: number) {
+  const ms = resolveFetchTimeoutMs(timeoutMs);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), ms);
   try {
     return await fetch(url, {
       ...init,

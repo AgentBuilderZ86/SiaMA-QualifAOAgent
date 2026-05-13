@@ -6,6 +6,9 @@ import { qualificationAction } from "../../actions";
 import { AppShell, PageHeader, Pill } from "@/components/shell";
 import { buildAoRail } from "../aoRail";
 
+/** Évite toute optimisation statique qui pourrait retarder la mise à jour d’URL côté client au changement d’onglet rail. */
+export const dynamic = "force-dynamic";
+
 const questions = [
   ["contexte", "Contexte métier et enjeux stratégiques"],
   ["perimetre", "Périmètre exact, activités et livrables"],

@@ -22,8 +22,13 @@ async function main() {
     formData.append(name, value);
   }
 
-  formData.set("email", process.env.APP_USER_EMAIL || "admin@siama.local");
-  formData.set("password", process.env.APP_USER_PASSWORD || "admin");
+  const email = process.env.APP_USER_EMAIL;
+  const password = process.env.APP_USER_PASSWORD;
+  if (!email || !password) {
+    throw new Error("smoke-dashboard: définir APP_USER_EMAIL et APP_USER_PASSWORD (pas de valeurs par défaut, compatibilité scan Netlify).");
+  }
+  formData.set("email", email);
+  formData.set("password", password);
 
   const postResponse = await fetch(`${baseUrl}/login`, {
     method: "POST",

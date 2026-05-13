@@ -9,6 +9,8 @@ import { WorkflowFlow } from "./workflow";
 import { AppShell, PageHeader, Pill, type SideRailGroup } from "@/components/shell";
 import { delayLabel } from "@/lib/aoDeadline";
 
+export const dynamic = "force-dynamic";
+
 function field(label: string, value: string | number | null | undefined) {
   return (
     <div className="info-item">

@@ -20,3 +20,10 @@ pnpm-debug.log*
 # Local scratch dirs / zips (ne pas versionner)
 .tmp-*/
 .tmp-*.zip
+
+# Artefacts locaux (générés / exports) et cache Python — hors dépôt (scan Netlify + taille)
+output/
+scripts/__pycache__/
+
+# Fichiers temporaires Office (verrou)
+~$*
