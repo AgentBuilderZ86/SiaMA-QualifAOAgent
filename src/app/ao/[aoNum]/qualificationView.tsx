@@ -175,12 +175,13 @@ function SignalGrid({ signals }: { signals: QualificationSignal[] }) {
 export function QualificationIntelligenceView({
   fiche,
   ao,
-  deckHref,
+  deckUrlBase,
   htmlHref
 }: {
   fiche: Partial<QualificationFiche> | null;
   ao?: AoRecord | null;
-  deckHref: string;
+  /** Chemin sans query, ex. `/ao/OP0001/qualification/deck` — les variantes ajoutent `?engine=`. */
+  deckUrlBase: string;
   htmlHref?: string;
 }) {
   const intelligence = asIntelligence(fiche);
@@ -274,10 +275,15 @@ export function QualificationIntelligenceView({
       </div>
 
       <div className="download-row">
-        <a href={deckHref}>📊 Télécharger le deck PowerPoint</a>
+        <a href={`${deckUrlBase}?engine=python`} title="Template master Sia (python-pptx)">
+          📊 Deck — modèle Sia
+        </a>
+        <a className="ghost" href={`${deckUrlBase}?engine=pptxgen`} title="Génération charte web (pptxgenjs)">
+          📊 Deck — charte web
+        </a>
         {htmlHref ? (
           <a className="ghost" href={htmlHref} target="_blank" rel="noreferrer">
-            📄 Télécharger la fiche HTML
+            📄 Fiche HTML
           </a>
         ) : null}
       </div>
