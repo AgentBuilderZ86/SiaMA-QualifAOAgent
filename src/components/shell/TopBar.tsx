@@ -56,11 +56,19 @@ export function TopBar({
       {searchSlot ? (
         searchSlot
       ) : (
-        <div className="search">
+        <form className="search" method="get" action="/dashboard" role="search" aria-label="Recherche pipeline">
           <span aria-hidden="true">🔍</span>
-          <input placeholder="Rechercher un AO, un client, un manager…" aria-label="Recherche" />
-          <span className="t-mono-sm">⌘K</span>
-        </div>
+          <input
+            name="client"
+            type="search"
+            placeholder="Client ou sujet (filtre pipeline)…"
+            aria-label="Filtrer le pipeline par client ou sujet"
+            autoComplete="off"
+          />
+          <button type="submit" className="search-submit" title="Appliquer le filtre sur le pipeline">
+            →
+          </button>
+        </form>
       )}
       {metaSlot ? (
         metaSlot

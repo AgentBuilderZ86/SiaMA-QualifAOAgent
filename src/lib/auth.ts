@@ -42,7 +42,7 @@ export async function requireUser() {
 }
 
 export function getUserRole(email: string) {
-  const admins = (process.env.APP_ADMIN_EMAILS || process.env.APP_USER_EMAIL || "")
+  const admins = (process.env["APP_ADMIN_EMAILS"] || process.env["APP_USER_EMAIL"] || "")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
@@ -73,5 +73,7 @@ export async function clearSession() {
 }
 
 export function validateLogin(email: string, password: string) {
-  return email === process.env.APP_USER_EMAIL && password === process.env.APP_USER_PASSWORD;
+  const expectedEmail = process.env["APP_USER_EMAIL"];
+  const expectedPassword = process.env["APP_USER_PASSWORD"];
+  return email === expectedEmail && password === expectedPassword;
 }

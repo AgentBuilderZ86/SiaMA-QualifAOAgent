@@ -882,6 +882,20 @@ table.pipe td.num,
   color: var(--dark-fg-2);
 }
 
+.topbar .search .search-submit {
+  border: 0;
+  background: transparent;
+  color: var(--dark-fg-1);
+  cursor: pointer;
+  font: var(--type-mono-sm);
+  padding: 0 2px 0 6px;
+  line-height: 1;
+}
+
+.topbar .search .search-submit:hover {
+  color: var(--sia-green);
+}
+
 .topbar .meta {
   display: flex;
   align-items: center;
