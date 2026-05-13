@@ -53,4 +53,4 @@ Adapte la liste aux **scénarios fournis** par l’auditeur.
 
 ## Chaînage
 
-**`ao-workflow-auditor`** (audit code + parcours) peut **t’invoquer** avec une checklist ; tes résultats **complètent** son tableau de constats (colonne preuve ou section « Vérification navigateur »).
+**`ao-workflow-auditor`** peut t’invoquer **en parallèle** de **`ao-data-agent`** (même mission) ; tes résultats forment la section **« Vérification navigateur »** du rapport fusionné, distincte de la section données.
