@@ -16,10 +16,19 @@ function bundledCachePath() {
 
 const TMP_CACHE = path.join("/tmp", "ao-cache.json");
 
-/** Cible d’écriture préférée (sans AO_CACHE_PATH : `data/` en local ; `NETLIFY=true` force `/tmp`). */
+/** Netlify / Lambda : pas d’écriture fiable sous `process.cwd()` (souvent `/var/task`). */
+function shouldWriteCacheToTmp() {
+  if (process.env.AO_CACHE_PATH?.trim()) return false;
+  if (process.env.NETLIFY === "true" || process.env.NETLIFY === "1") return true;
+  if (Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME)) return true;
+  const cwd = process.cwd();
+  return cwd === "/var/task" || cwd.startsWith("/var/task/");
+}
+
+/** Cible d’écriture préférée (sans AO_CACHE_PATH : `data/` en local ; serverless → `/tmp`). */
 function cacheWritePathPrimary() {
   if (process.env.AO_CACHE_PATH?.trim()) return process.env.AO_CACHE_PATH.trim();
-  if (process.env.NETLIFY === "true") return TMP_CACHE;
+  if (shouldWriteCacheToTmp()) return TMP_CACHE;
   return bundledCachePath();
 }
 
@@ -51,7 +60,8 @@ export async function readAoCache(): Promise<AoCachePayload> {
 }
 
 function isWriteRetryableErr(code: string | undefined) {
-  return code === "EACCES" || code === "EROFS" || code === "EPERM";
+  /** ENOENT : ex. mkdir sur `/var/task/data` quand l’arborescence n’est pas créable côté serverless. */
+  return code === "EACCES" || code === "EROFS" || code === "EPERM" || code === "ENOENT";
 }
 
 export async function writeAoCache(payload: AoCachePayload) {
