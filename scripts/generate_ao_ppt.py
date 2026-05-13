@@ -68,10 +68,24 @@ def slug(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("_")[:90] or "ao"
 
 
+def resolve_repo_path(p: Path) -> Path:
+    """Chemins relatifs dans ppt-sections.json sont relatifs à la racine du dépôt (parent de scripts/)."""
+    if p.is_absolute():
+        return p
+    return (ROOT / p).resolve()
+
+
 def load_config(path: Path) -> dict[str, Any]:
     if path.exists():
         return load_json(path)
-    return {"defaultTemplatePath": str(Path.home() / "Documents" / "Modèles Office personnalisés" / "Copie de Sia_Template_Master.potx"), "profiles": {"standard": ["title", "agenda", "decision", "identification", "qualification", "signals", "risks", "watchpoints", "simulation", "proposal", "nextSteps", "sources", "conclusion"], "short": ["title", "decision", "identification", "signals", "watchpoints", "conclusion"], "finance": ["title", "decision", "identification", "simulation", "watchpoints", "sources", "conclusion"]}}
+    return {
+        "defaultTemplatePath": "config/templates/Sia_Template_Master.pptx",
+        "profiles": {
+            "standard": ["title", "agenda", "decision", "identification", "qualification", "signals", "risks", "watchpoints", "simulation", "proposal", "nextSteps", "sources", "conclusion"],
+            "short": ["title", "decision", "identification", "signals", "watchpoints", "conclusion"],
+            "finance": ["title", "decision", "identification", "simulation", "watchpoints", "sources", "conclusion"],
+        },
+    }
 
 
 def normalized_template_source(template_path: Path) -> Path | io.BytesIO:
@@ -513,7 +527,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--analysis-output", type=Path, default=DEFAULT_ANALYSIS)
     args = parser.parse_args(argv)
     config = load_config(args.config)
-    template_path = args.template or Path(config.get("defaultTemplatePath", ""))
+    template_path = resolve_repo_path(args.template or Path(str(config.get("defaultTemplatePath", ""))))
     if not template_path.exists():
         raise SystemExit(f"Template introuvable: {template_path}")
     if args.analyze_template:

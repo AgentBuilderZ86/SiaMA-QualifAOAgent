@@ -1,5 +1,5 @@
 {
-  "defaultTemplatePath": "C:\\Users\\Setup Game\\Documents\\Modèles Office personnalisés\\Copie de Sia_Template_Master.potx",
+  "defaultTemplatePath": "config/templates/Sia_Template_Master.pptx",
   "profiles": {
     "standard": [
       "title",
