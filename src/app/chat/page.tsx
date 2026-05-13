@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { AppShell, type SideRailGroup } from "@/components/shell";
 import { delayLabel, urgentByDeadline } from "@/lib/aoDeadline";
 import type { AoRecord } from "@/lib/aoTypes";
+import ChatComposer from "./ChatComposer";
 
 export const dynamic = "force-dynamic";
 
@@ -277,31 +278,7 @@ export default async function ChatPage() {
           </div>
         </div>
 
-        <div className="composer-wrap">
-          <div className="composer">
-            <div className="composer-row">
-              <button type="button" className="iconbtn" title="Joindre" aria-label="Joindre">📎</button>
-              <textarea
-                placeholder="Tapez « run » pour lancer le pipeline · « BO 30106324 » pour activer un AO · « simu 30106324 » pour simuler…"
-                aria-label="Composer un message"
-              />
-              <button type="button" className="send">↩ Envoyer</button>
-            </div>
-            <div className="composer-foot">
-              <div className="cmds">
-                <span><code>run</code> pipeline</span>
-                <span><code>BO N°</code> activer</span>
-                <span><code>P2P N°</code> simuler</span>
-                <span><code>PS N°</code> envoyée</span>
-                <span><code>PITCH N°</code> soutenance</span>
-                <span><code>PW</code> / <code>PL</code> clôture</span>
-                <span><code>simu N°</code></span>
-                <span><code>section approche N°</code></span>
-              </div>
-              <span className="t-meta">SiaGPT v8 · ⌘ + ↩ pour envoyer</span>
-            </div>
-          </div>
-        </div>
+        <ChatComposer />
       </section>
     </AppShell>
   );
