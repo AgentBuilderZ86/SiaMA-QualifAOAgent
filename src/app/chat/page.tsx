@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { AppShell, type SideRailGroup } from "@/components/shell";
 import { delayLabel, urgentByDeadline } from "@/lib/aoDeadline";
 import type { AoRecord } from "@/lib/aoTypes";
+import { isPendingReassignment } from "@/lib/managerGovernance";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,7 @@ export default async function ChatPage() {
   const pipelineRows = data.recent
     .filter((ao) => ["BO", "P2P", "PS", "PITCH"].includes(ao.statut))
     .slice(0, PIPELINE_DISPLAY_LIMIT);
+  const pendingReassignments = data.records.filter(isPendingReassignment).slice(0, 5);
 
   const focusAo = data.urgent[0] ?? data.recent.find((ao) => ao.statut === "BO" || ao.statut === "P2P") ?? data.recent[0];
 
@@ -73,6 +75,16 @@ export default async function ChatPage() {
         { label: "📤 PS", count: data.records.filter((ao) => ao.statut === "PS").length },
         { label: "🎤 PITCH", count: data.records.filter((ao) => ao.statut === "PITCH").length },
         { label: "⏳ A qualifier", count: data.totals.aQualifier }
+      ]
+    },
+    {
+      title: "Réaffectations",
+      items: [
+        {
+          label: "À statuer",
+          count: pendingReassignments.length,
+          href: pendingReassignments[0] ? `/ao/${encodeURIComponent(pendingReassignments[0].aoNum)}` : "/dashboard"
+        }
       ]
     },
     {
@@ -104,6 +116,48 @@ export default async function ChatPage() {
               <span className="dot" />
               Pipeline synchronisé · {data.totals.all} AOs suivis · {data.totals.aQualifier} à qualifier · {data.totals.urgent} urgents
             </div>
+
+            {pendingReassignments.length ? (
+              <div className="turn">
+                <div className="bubble">
+                  <h2>🔁 Réaffectations à statuer</h2>
+                  <p className="meta">
+                    {pendingReassignments.length} proposition(s) en attente du manager recommandé.
+                  </p>
+                  <hr />
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>AO</th>
+                        <th>Client</th>
+                        <th>Manager actuel</th>
+                        <th>Manager recommandé</th>
+                        <th>Motif</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingReassignments.map((ao) => (
+                        <tr key={`${ao.aoNum}-reassignment`}>
+                          <td>
+                            <Link href={`/ao/${encodeURIComponent(ao.aoNum)}`}>
+                              <code>{ao.displayAoNum}</code>
+                            </Link>
+                          </td>
+                          <td>{ao.client}</td>
+                          <td>{ao.manager || "—"}</td>
+                          <td>{ao.recommendedManager}</td>
+                          <td>{ao.reassignmentJustification || ao.statusJustification || "À documenter"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="suggest">
+                    <Link href={`/ao/${encodeURIComponent(pendingReassignments[0].aoNum)}`}>Statuer sur la première proposition</Link>
+                    <Link href="/rules">Voir Feedback_Règles</Link>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="turn user">
               <div className="bubble">run</div>

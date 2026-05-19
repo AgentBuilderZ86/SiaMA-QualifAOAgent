@@ -9,6 +9,8 @@ import {
   saveProposalSection,
   saveQualification,
   saveSimulation,
+  decideOpportunityReassignment,
+  updateOpportunityGovernance,
   transitionAo,
   runAtelierChat
 } from "@/lib/ao";
@@ -27,6 +29,33 @@ export async function transitionAction(formData: FormData) {
   const note = String(formData.get("note") || "");
   await transitionAo(aoNum, status, actor, note);
   revalidatePath("/dashboard");
+  revalidatePath(pathFor(aoNum));
+  redirect(pathFor(aoNum));
+}
+
+export async function opportunityGovernanceAction(formData: FormData) {
+  const actor = await requireUser();
+  const aoNum = String(formData.get("aoNum") || "");
+  await updateOpportunityGovernance(aoNum, actor, {
+    status: String(formData.get("status") || ""),
+    justification: String(formData.get("justification") || ""),
+    recommendedManager: String(formData.get("recommendedManager") || "")
+  });
+  revalidatePath("/dashboard");
+  revalidatePath("/chat");
+  revalidatePath("/rules");
+  revalidatePath(pathFor(aoNum));
+  redirect(pathFor(aoNum));
+}
+
+export async function reassignmentDecisionAction(formData: FormData) {
+  const actor = await requireUser();
+  const aoNum = String(formData.get("aoNum") || "");
+  const decision = String(formData.get("decision") || "") === "accept" ? "accept" : "reject";
+  await decideOpportunityReassignment(aoNum, actor, decision, String(formData.get("justification") || ""));
+  revalidatePath("/dashboard");
+  revalidatePath("/chat");
+  revalidatePath("/rules");
   revalidatePath(pathFor(aoNum));
   redirect(pathFor(aoNum));
 }

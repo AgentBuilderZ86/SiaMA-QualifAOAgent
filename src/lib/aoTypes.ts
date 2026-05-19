@@ -12,6 +12,14 @@ export type AoRecord = {
   client: string;
   sujet: string;
   manager: string;
+  recommendedManager?: string;
+  previousManager?: string;
+  reassignmentStatus?: ReassignmentStatus | "";
+  reassignmentProposedBy?: string;
+  reassignmentJustification?: string;
+  reassignmentDecisionBy?: string;
+  reassignmentDecisionJustification?: string;
+  statusJustification?: string;
   budget: string;
   delaiJours: number | null;
   dateLimite: string;
@@ -51,6 +59,8 @@ export type PipelineEvent = {
   actor: string;
   note: string;
 };
+
+export type ReassignmentStatus = "À valider" | "Acceptée" | "Refusée";
 
 /** Indices regex / audit extraction (ne remplace pas les champs AO Sheet). */
 export type QualificationExtractionEvidence = {
@@ -300,10 +310,18 @@ export const PIPELINE_HEADERS = [
   "Sujet",
   "Client",
   "Manager",
+  "Manager recommandé",
+  "Manager précédent",
+  "Statut réaffectation",
+  "Réaffectation proposée par",
+  "Justification réaffectation",
+  "Décision réaffectation par",
+  "Justification décision réaffectation",
   "Budget",
   "Date limite",
   "Statut workflow",
   "Date entrée statut",
+  "Justification changement statut",
   "Probabilité %",
   "Notes",
   "Fiche qualification",
@@ -321,6 +339,19 @@ export const PIPELINE_HEADERS = [
 ];
 
 export const HIST_HEADERS = ["Timestamp", "N° AO", "Ancien statut", "Nouveau statut", "Acteur", "Note"];
+export const FEEDBACK_RULE_HEADERS = [
+  "timestamp",
+  "ao_num",
+  "decision_ia",
+  "decision_manager",
+  "motif_manager",
+  "statut",
+  "manager_actuel",
+  "manager_recommande",
+  "type_feedback",
+  "acteur",
+  "source"
+];
 export const REF_HEADERS = ["type", "name", "value", "unit", "source", "active"];
 
 export const DEFAULT_REFERENTIELS: ReferentielItem[] = [
@@ -383,6 +414,7 @@ export function sheetRecordToAo(row: SheetRecord | SheetRow, sourceTab: string, 
   const pipelineStatus = row["Statut workflow"] || row["STATUT"] || "";
   const statut = normalizeStatus(pipelineStatus, fallbackStatus);
   const rowIndexRaw = (row as SheetRecord)._rowIndex;
+  const reassignmentStatus = normalizeReassignmentStatus(row["Statut réaffectation"] || "");
 
   const displayAoNum = row["N° d'ordre"] || row["N° AO"] || "";
   const syntheticAoNum = rowIndexRaw ? `ROW:${sourceTab}:${rowIndexRaw}` : "NC";
@@ -393,6 +425,14 @@ export function sheetRecordToAo(row: SheetRecord | SheetRow, sourceTab: string, 
     client: row.CLIENT || row.Client || "Client non renseigné",
     sujet: row.SUJET || row.Sujet || "Sujet non renseigné",
     manager: row["RESP."] || row.Manager || row["Manager recommandé"] || "Non assigné",
+    recommendedManager: row["Manager recommandé"] || "",
+    previousManager: row["Manager précédent"] || "",
+    reassignmentStatus,
+    reassignmentProposedBy: row["Réaffectation proposée par"] || "",
+    reassignmentJustification: row["Justification réaffectation"] || "",
+    reassignmentDecisionBy: row["Décision réaffectation par"] || "",
+    reassignmentDecisionJustification: row["Justification décision réaffectation"] || "",
+    statusJustification: row["Justification changement statut"] || "",
     budget: row["BUDGET "] || row["BUDGET TTC"] || row.Budget || "NC",
     delaiJours: parseDays(row["COMPTE A REBOURS/JOURS"] || ""),
     dateLimite: row["DATE DE REPONSE"] || row["Date limite"] || "",
@@ -405,6 +445,15 @@ export function sheetRecordToAo(row: SheetRecord | SheetRow, sourceTab: string, 
     sourceName: sourceTab,
     raw: row
   });
+}
+
+export function normalizeReassignmentStatus(value: string): ReassignmentStatus | "" {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!normalized) return "";
+  if (["A VALIDER", "À VALIDER"].includes(normalized)) return "À valider";
+  if (["ACCEPTEE", "ACCEPTÉE", "ACCEPTE", "ACCEPTÉ"].includes(normalized)) return "Acceptée";
+  if (["REFUSEE", "REFUSÉE", "REFUSE", "REFUSÉ"].includes(normalized)) return "Refusée";
+  return "";
 }
 
 function firstMeaningful(...values: Array<string | number | null | undefined>) {
@@ -429,6 +478,17 @@ export function mergeAoRecords(source: AoRecord | null, pipeline: AoRecord | nul
     client: firstMeaningful(source.client, pipeline.client) || source.client,
     sujet: firstMeaningful(source.sujet, pipeline.sujet) || source.sujet,
     manager: firstMeaningful(pipeline.manager, source.manager) || source.manager,
+    recommendedManager: firstMeaningful(pipeline.recommendedManager, source.recommendedManager),
+    previousManager: firstMeaningful(pipeline.previousManager, source.previousManager),
+    reassignmentStatus: pipeline.reassignmentStatus || source.reassignmentStatus || "",
+    reassignmentProposedBy: firstMeaningful(pipeline.reassignmentProposedBy, source.reassignmentProposedBy),
+    reassignmentJustification: firstMeaningful(pipeline.reassignmentJustification, source.reassignmentJustification),
+    reassignmentDecisionBy: firstMeaningful(pipeline.reassignmentDecisionBy, source.reassignmentDecisionBy),
+    reassignmentDecisionJustification: firstMeaningful(
+      pipeline.reassignmentDecisionJustification,
+      source.reassignmentDecisionJustification
+    ),
+    statusJustification: firstMeaningful(pipeline.statusJustification, source.statusJustification),
     budget: firstMeaningful(source.budget, pipeline.budget) || source.budget,
     delaiJours: source.delaiJours ?? pipeline.delaiJours,
     dateLimite: firstMeaningful(source.dateLimite, pipeline.dateLimite),
