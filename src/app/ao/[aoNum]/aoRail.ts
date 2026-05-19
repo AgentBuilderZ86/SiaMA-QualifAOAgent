@@ -6,6 +6,7 @@ export function buildAoRail(aoHref: string, active: AoRailActive, workflowStatut
   const showAtelier = workflowStatut === "BO" || workflowStatut === "P2P";
   const items: SideRailItem[] = [
     { label: "📋 Vue d'ensemble", href: `/ao/${aoHref}`, active: active === "overview" },
+    { label: "🔁 Réaffecter / statuer", href: `/ao/${aoHref}#pilotage-manager` },
     { label: "📑 Qualification", href: `/ao/${aoHref}/qualification`, active: active === "qualification" },
     { label: "💰 Simulation & propale", href: `/ao/${aoHref}/proposal`, active: active === "proposal" }
   ];
