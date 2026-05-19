@@ -5,9 +5,28 @@ import { delayLabel, numericDelaiJours, urgentByDeadline } from "@/lib/aoDeadlin
 import { isPendingReassignment } from "@/lib/managerGovernance";
 import { requireUser } from "@/lib/auth";
 import { AppShell, PageHeader, Pill, type SideRailGroup } from "@/components/shell";
-import type { AoRecord } from "@/lib/aoTypes";
+import type { AoRecord, QualificationFiche } from "@/lib/aoTypes";
 
 export const dynamic = "force-dynamic";
+
+type OfficeTodo = {
+  id: string;
+  category: "Réaffectation" | "Affectation" | "Qualification" | "Dossier admin" | "Échéance" | "Finance" | "Clôture";
+  label: string;
+  helper: string;
+  href: string;
+  priority: number;
+};
+
+const DEFAULT_ADMIN_DOCUMENTS = [
+  "CPS / cahier des prescriptions spéciales",
+  "RC / règlement de consultation",
+  "Avis d'appel d'offres ou lettre de consultation",
+  "Acte d'engagement / déclaration sur l'honneur",
+  "Attestations fiscales, sociales et registre de commerce",
+  "Bordereau des prix / offre financière",
+  "Caution provisoire si le RC l'exige"
+] as const;
 
 function managerLabel(value: string) {
   return value && value !== "Non assigné" ? value : "Non assigné";
@@ -38,6 +57,180 @@ function sortAdminQueue(a: AoRecord, b: AoRecord) {
     return 4;
   };
   return rank(a) - rank(b) || (numericDelaiJours(a.delaiJours) ?? 999) - (numericDelaiJours(b.delaiJours) ?? 999);
+}
+
+function hasRawValue(ao: AoRecord, field: string) {
+  return Boolean(String(ao.raw?.[field] || "").trim());
+}
+
+function aoHref(ao: AoRecord, suffix = "") {
+  return `/ao/${encodeURIComponent(ao.aoNum)}${suffix}`;
+}
+
+function parseQualification(ao: AoRecord): QualificationFiche | null {
+  const raw = ao.raw?.["Fiche qualification"];
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as QualificationFiche;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isDocumentLoaded(fiche: QualificationFiche | null) {
+  if (!fiche) return false;
+  const name = String(fiche.documentName || "").trim();
+  const extract = String(fiche.documentExtract || "").trim();
+  return Boolean(name || (extract && extract !== "Non trouvé dans le document."));
+}
+
+function detectedLoadedFiles(fiche: QualificationFiche | null) {
+  if (!fiche?.documentExtract) return [];
+  const files = [...fiche.documentExtract.matchAll(/--- Fichier ZIP :\s*([^-]+?)\s*---/g)]
+    .map((match) => match[1]?.trim())
+    .filter(Boolean);
+  if (files.length) return [...new Set(files)].slice(0, 6);
+  return fiche.documentName ? [fiche.documentName] : [];
+}
+
+function cleanRequirement(value: string) {
+  return value
+    .replace(/^[\s:;,\-.•\d)]+/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 140);
+}
+
+function extractAdminRequirements(fiche: QualificationFiche | null) {
+  const text = String(fiche?.documentExtract || "");
+  if (!text || text === "Non trouvé dans le document.") return [];
+  const candidates = new Set<string>();
+  const lines = text.split(/\n+/).map(cleanRequirement).filter(Boolean);
+  const keyword =
+    /(pi[eè]ces?|documents?|dossier administratif|attestation|certificat|caution|registre de commerce|cnss|fiscal|acte d'engagement|déclaration sur l'honneur|bordereau|offre financière|offre technique|r[èe]glement de consultation|cps|rc|avis d'appel)/i;
+
+  lines.forEach((line, index) => {
+    if (!keyword.test(line)) return;
+    candidates.add(line);
+    const next = cleanRequirement(lines[index + 1] || "");
+    if (next && next.length < 120 && !/^(article|chapitre|section)\b/i.test(next)) candidates.add(next);
+  });
+
+  return [...candidates].filter((item) => item.length >= 8).slice(0, 8);
+}
+
+function buildAdminDocumentTodos(ao: AoRecord, startPriority: number): OfficeTodo[] {
+  const fiche = parseQualification(ao);
+  const loaded = isDocumentLoaded(fiche);
+  const files = detectedLoadedFiles(fiche);
+  const detected = extractAdminRequirements(fiche);
+  const source = files.length ? `Source détectée : ${files.join(", ")}` : "Source : dossier chargé";
+
+  if (loaded && detected.length) {
+    return detected.map((piece, index) => ({
+      id: `admin-detected-${index}`,
+      category: "Dossier admin",
+      label: `Vérifier : ${piece}`,
+      helper: source,
+      href: aoHref(ao, "/qualification"),
+      priority: startPriority + index / 100
+    }));
+  }
+
+  const helper = loaded
+    ? "Document chargé, mais pièces admin non isolées automatiquement : confirmer dans le RC/CPS."
+    : "Aucun CPS/RC/Avis chargé : checklist standard à confirmer selon le dossier.";
+
+  return DEFAULT_ADMIN_DOCUMENTS.map((piece, index) => ({
+    id: `admin-default-${index}`,
+    category: "Dossier admin",
+    label: `Contrôler : ${piece}`,
+    helper,
+    href: loaded ? aoHref(ao, "/qualification") : aoHref(ao, "/qualification"),
+    priority: startPriority + index / 100
+  }));
+}
+
+function buildOfficeTodos(ao: AoRecord): OfficeTodo[] {
+  const todos: OfficeTodo[] = [];
+  if (isPendingReassignment(ao)) {
+    todos.push({
+      id: "reassignment",
+      category: "Réaffectation",
+      label: `Statuer sur ${ao.recommendedManager || "le manager recommandé"}`,
+      helper: ao.reassignmentJustification || "Valider ou refuser la proposition de réaffectation.",
+      href: aoHref(ao, "#pilotage-manager"),
+      priority: 0
+    });
+  }
+  if (!ao.manager || ao.manager === "Non assigné") {
+    todos.push({
+      id: "manager",
+      category: "Affectation",
+      label: "Affecter un manager responsable",
+      helper: "Aucun owner n'est visible sur cet AO.",
+      href: aoHref(ao, "#pilotage-manager"),
+      priority: 1
+    });
+  }
+  if (ao.statut === "A QUALIFIER" || !hasRawValue(ao, "Fiche qualification")) {
+    todos.push({
+      id: "qualification",
+      category: "Qualification",
+      label: "Lancer ou compléter la qualification",
+      helper: "La fiche qualification n'est pas encore consolidée.",
+      href: aoHref(ao, "/qualification"),
+      priority: 2
+    });
+  }
+  todos.push(...buildAdminDocumentTodos(ao, 2.5));
+  if (urgentByDeadline(ao)) {
+    todos.push({
+      id: "deadline",
+      category: "Échéance",
+      label: "Sécuriser l'échéance de réponse",
+      helper: `Délai actuel : ${delayLabel(ao.delaiJours)}.`,
+      href: aoHref(ao, "#pilotage-manager"),
+      priority: 3
+    });
+  }
+  if (["BO", "P2P"].includes(ao.statut) && !hasRawValue(ao, "Simulation financière")) {
+    todos.push({
+      id: "simulation",
+      category: "Finance",
+      label: "Compléter la simulation financière",
+      helper: "La simulation ou la propale doit être préparée.",
+      href: aoHref(ao, "/proposal"),
+      priority: 4
+    });
+  }
+  if (["PW", "PL"].includes(ao.statut) && !hasRawValue(ao, "Motif clôture")) {
+    todos.push({
+      id: "closure",
+      category: "Clôture",
+      label: "Documenter le motif de clôture",
+      helper: "Capitaliser la décision pour les prochaines règles.",
+      href: aoHref(ao, "/closure"),
+      priority: 5
+    });
+  }
+  return todos.sort((a, b) => a.priority - b.priority);
+}
+
+function consolidateTodos(rows: Array<{ ao: AoRecord; todos: OfficeTodo[] }>) {
+  const byCategory = new Map<OfficeTodo["category"], { category: OfficeTodo["category"]; count: number; firstHref: string }>();
+  rows.forEach(({ todos }) => {
+    todos.forEach((todo) => {
+      const current = byCategory.get(todo.category);
+      byCategory.set(todo.category, {
+        category: todo.category,
+        count: (current?.count ?? 0) + 1,
+        firstHref: current?.firstHref ?? todo.href
+      });
+    });
+  });
+  return [...byCategory.values()].sort((a, b) => b.count - a.count);
 }
 
 function kpi(label: string, value: number, helper: string) {
@@ -72,6 +265,12 @@ export default async function OfficeManagerPage() {
     .filter((ao) => isPendingReassignment(ao) || ao.statut === "A QUALIFIER" || urgentByDeadline(ao) || !ao.manager || ao.manager === "Non assigné")
     .sort(sortAdminQueue)
     .slice(0, 30);
+  const todoRows = data.records
+    .map((ao) => ({ ao, todos: buildOfficeTodos(ao) }))
+    .filter((row) => row.todos.length > 0)
+    .sort((a, b) => a.todos[0].priority - b.todos[0].priority || sortAdminQueue(a.ao, b.ao));
+  const todoConsolidated = consolidateTodos(todoRows);
+  const openTodoCount = todoRows.reduce((sum, row) => sum + row.todos.length, 0);
 
   const rail: SideRailGroup[] = [
     {
@@ -85,6 +284,7 @@ export default async function OfficeManagerPage() {
     {
       title: "Files admin",
       items: [
+        { label: "✅ Todo consolidée", count: openTodoCount },
         { label: "🔁 Réaffectations", count: pendingReassignments.length },
         { label: "👤 Sans manager", count: unassigned.length },
         { label: "⏳ À qualifier", count: data.totals.aQualifier },
@@ -166,7 +366,66 @@ export default async function OfficeManagerPage() {
           urgent[0] ? `/ao/${encodeURIComponent(urgent[0].aoNum)}#pilotage-manager` : "#file-admin",
           "is-urgent"
         )}
+        {actionCard(
+          "Todo ouvertes",
+          openTodoCount,
+          "Toutes actions à ne pas oublier",
+          "#todo-office",
+          "is-todo"
+        )}
       </div>
+
+      <section className="grid two-col" id="todo-office" style={{ marginTop: 16 }}>
+        <div className="card section">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">Todo consolidée</p>
+              <h2>{openTodoCount} action(s) ouvertes</h2>
+            </div>
+          </div>
+          <div className="office-todo-summary-grid">
+            {todoConsolidated.map((item) => (
+              <Link className="office-todo-summary-card" href={item.firstHref} key={item.category}>
+                <span>{item.category}</span>
+                <strong>{item.count}</strong>
+                <em>Voir première action</em>
+              </Link>
+            ))}
+            {todoConsolidated.length === 0 ? <p className="muted">Aucune action ouverte.</p> : null}
+          </div>
+        </div>
+
+        <div className="card section">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">TodoList par AO</p>
+              <h2>Checklist opérationnelle</h2>
+            </div>
+          </div>
+          <div className="office-todo-list">
+            {todoRows.slice(0, 8).map(({ ao, todos }) => (
+              <div className="office-todo-ao" key={`${ao.sourceTab}-${ao.aoNum}`}>
+                <div className="office-todo-ao__head">
+                  <strong>{ao.client}</strong>
+                  <span className="ao-num">{ao.displayAoNum}</span>
+                </div>
+                <ul>
+                  {todos.map((todo) => (
+                    <li key={todo.id}>
+                      <input type="checkbox" readOnly aria-label={todo.label} />
+                      <div>
+                        <Link href={todo.href}>{todo.label}</Link>
+                        <p>{todo.helper}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            {todoRows.length === 0 ? <p className="muted">Toutes les actions administratives sont couvertes.</p> : null}
+          </div>
+        </div>
+      </section>
 
       <section className="card section" id="file-admin" style={{ marginTop: 16 }}>
         <div className="section-header">
