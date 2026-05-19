@@ -13,7 +13,7 @@ export function ManagerGovernancePanel({ ao, enabled, user }: { ao: AoRecord; en
   const isRecommendedManager = managerMatchesUser(ao.recommendedManager || "", user);
 
   return (
-    <section className="card section">
+    <section className="card section" id="pilotage-manager">
       <div className="section-header">
         <div>
           <p className="eyebrow">Pilotage manager</p>

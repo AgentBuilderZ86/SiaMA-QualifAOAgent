@@ -54,6 +54,9 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
             <Link className="btn btn--ghost" href="/dashboard">
               ← Pipeline
             </Link>
+            <Link className="btn btn--ghost" href={`/ao/${aoHref}#pilotage-manager`}>
+              Réaffecter / statuer
+            </Link>
             <Link className="btn btn--accent" href={`/ao/${aoHref}/qualification`}>
               Ouvrir la qualification
             </Link>
