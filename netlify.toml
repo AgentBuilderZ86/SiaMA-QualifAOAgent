@@ -9,6 +9,7 @@
 # Scan de secrets : onglets Sheets / modèles publics / limites tokens = config, pas des clés API ;
 # .env.example et artefacts output ne doivent pas bloquer le build si alignés sur l’UI Netlify.
 [build.environment]
+  NODE_VERSION = "22"
   SECRETS_SCAN_OMIT_KEYS = "SHEET_AQ,SHEET_EC,SHEET_NG,SHEET_PIPELINE,OPENAI_MODEL,OPENAI_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_MAX_OUTPUT_TOKENS,LLM_MAX_OUTPUT_TOKENS,LLM_QUALIFICATION_MAX_TOKENS,APP_USER_EMAIL,APP_USER_PASSWORD"
   SECRETS_SCAN_OMIT_PATHS = ".env.example,output/**,scripts/__pycache__/**"
 
