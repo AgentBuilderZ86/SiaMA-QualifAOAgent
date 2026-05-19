@@ -101,6 +101,7 @@ export default async function RulesPage() {
                 <th>Manager actuel</th>
                 <th>Manager recommandé</th>
                 <th>Type</th>
+                <th>Signal acquisition</th>
               </tr>
             </thead>
             <tbody>
@@ -116,11 +117,12 @@ export default async function RulesPage() {
                   <td>{row.manager_actuel}</td>
                   <td>{row.manager_recommande}</td>
                   <td>{row.type_feedback}</td>
+                  <td>{row.acquisition_signal || row.source_name || ""}</td>
                 </tr>
               ))}
               {feedback.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="muted">
+                  <td colSpan={9} className="muted">
                     Aucun feedback enregistré.
                   </td>
                 </tr>

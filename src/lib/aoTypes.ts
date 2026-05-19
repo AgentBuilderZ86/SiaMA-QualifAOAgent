@@ -349,6 +349,10 @@ export const FEEDBACK_RULE_HEADERS = [
   "manager_actuel",
   "manager_recommande",
   "type_feedback",
+  "source_kind",
+  "source_name",
+  "data_quality_score",
+  "acquisition_signal",
   "acteur",
   "source"
 ];
