@@ -18,6 +18,9 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+[functions."refresh-ao-sources"]
+  schedule = "0 */6 * * *"
+
 ## Large uploads: Server Actions body size is controlled by Next config
 ## but Netlify functions may have limits; keep documents reasonably sized.
 

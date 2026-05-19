@@ -174,6 +174,15 @@ async function appendGovernanceFeedback(params: {
   recommendedManager?: string;
   typeFeedback: string;
 }) {
+  const qualityScore = params.ao.dataQuality?.completenessScore;
+  const acquisitionSignals = [
+    params.typeFeedback,
+    params.ao.sourceKind ? `source_kind=${params.ao.sourceKind}` : "",
+    params.ao.sourceName ? `source_name=${params.ao.sourceName}` : "",
+    typeof qualityScore === "number" ? `quality=${qualityScore}` : "",
+    params.ao.dataQuality?.warnings.length ? `warnings=${params.ao.dataQuality.warnings.join("|")}` : ""
+  ].filter(Boolean);
+
   await aoRepository.appendRuleFeedback({
     timestamp: new Date().toISOString(),
     ao_num: params.ao.aoNum,
@@ -184,6 +193,10 @@ async function appendGovernanceFeedback(params: {
     manager_actuel: params.ao.manager || "Non assigné",
     manager_recommande: params.recommendedManager || params.ao.recommendedManager || "",
     type_feedback: params.typeFeedback,
+    source_kind: params.ao.sourceKind || "",
+    source_name: params.ao.sourceName || params.ao.sourceTab || "",
+    data_quality_score: typeof qualityScore === "number" ? String(qualityScore) : "",
+    acquisition_signal: acquisitionSignals.join(" ; "),
     acteur: params.actor,
     source: "SiaGPT AO Agent"
   });
