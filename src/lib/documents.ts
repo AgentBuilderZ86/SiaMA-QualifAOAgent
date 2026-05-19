@@ -17,6 +17,12 @@ export type DocumentSections = {
   pointsVigilance: string[];
 };
 
+type DocumentBufferInput = {
+  name: string;
+  buffer: Buffer;
+  contentType?: string;
+};
+
 /** Limite globale de caractères conservée pour scoring / LLM (évite OOM serverless). */
 export const MAX_EXTRACT_CHARS = 50000;
 /** Texte max par fichier dans une archive avant concaténation globale. */
@@ -267,17 +273,16 @@ async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<Extr
   return { name: outerName, text, warning };
 }
 
-export async function extractUploadedDocument(file: File | null): Promise<ExtractedDocument> {
-  if (!file || file.size === 0) {
-    return { name: "", text: "", warning: "Aucun document transmis." };
+export async function extractDocumentBuffer({ name, buffer, contentType = "" }: DocumentBufferInput): Promise<ExtractedDocument> {
+  if (!buffer.length) {
+    return { name, text: "", warning: "Document vide." };
   }
 
-  const name = file.name;
   const ext = name.split(".").pop()?.toLowerCase() || "";
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const normalizedType = contentType.toLowerCase();
 
-  if (ext === "zip") {
-    if (file.size > MAX_ZIP_UPLOAD_BYTES) {
+  if (ext === "zip" || normalizedType.includes("zip")) {
+    if (buffer.length > MAX_ZIP_UPLOAD_BYTES) {
       return {
         name,
         text: "",
@@ -287,11 +292,11 @@ export async function extractUploadedDocument(file: File | null): Promise<Extrac
     return extractZipBuffer(buffer, name);
   }
 
-  if (ext === "txt" || file.type.startsWith("text/")) {
+  if (ext === "txt" || normalizedType.startsWith("text/")) {
     return { name, text: cleanText(buffer.toString("utf8")).slice(0, MAX_EXTRACT_CHARS), warning: "" };
   }
 
-  if (ext === "pdf") {
+  if (ext === "pdf" || normalizedType.includes("pdf")) {
     const { text, warning } = await extractPdfBuffer(buffer);
     return {
       name,
@@ -300,7 +305,7 @@ export async function extractUploadedDocument(file: File | null): Promise<Extrac
     };
   }
 
-  if (ext === "docx") {
+  if (ext === "docx" || normalizedType.includes("wordprocessingml.document")) {
     try {
       const mammoth = await import("mammoth");
       const result = await mammoth.extractRawText({ buffer });
@@ -321,8 +326,18 @@ export async function extractUploadedDocument(file: File | null): Promise<Extrac
   return {
     name,
     text: "",
-    warning: `Extraction automatique non disponible pour .${ext}. Formats pris en charge : .txt, .docx, .pdf, .zip (PDF/DOCX/TXT). Ajoutez un extrait manuel si besoin.`
+    warning: `Extraction automatique non disponible pour .${ext || "inconnu"}. Formats pris en charge : .txt, .docx, .pdf, .zip (PDF/DOCX/TXT).`
   };
+}
+
+export async function extractUploadedDocument(file: File | null): Promise<ExtractedDocument> {
+  if (!file || file.size === 0) {
+    return { name: "", text: "", warning: "Aucun document transmis." };
+  }
+
+  const name = file.name;
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return extractDocumentBuffer({ name, buffer, contentType: file.type });
 }
 
 export function summarizeDocumentText(text: string, fallback: string) {
