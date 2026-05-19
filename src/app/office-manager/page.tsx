@@ -18,6 +18,12 @@ type OfficeTodo = {
   priority: number;
 };
 
+type DuplicateGroup = {
+  key: string;
+  label: string;
+  records: AoRecord[];
+};
+
 const DEFAULT_ADMIN_DOCUMENTS = [
   "CPS / cahier des prescriptions spéciales",
   "RC / règlement de consultation",
@@ -57,6 +63,60 @@ function sortAdminQueue(a: AoRecord, b: AoRecord) {
     return 4;
   };
   return rank(a) - rank(b) || (numericDelaiJours(a.delaiJours) ?? 999) - (numericDelaiJours(b.delaiJours) ?? 999);
+}
+
+function normalizeDataKey(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function duplicateKeyFor(ao: AoRecord) {
+  const buyer = normalizeDataKey(ao.buyer || ao.client);
+  const title = normalizeDataKey(ao.sujet);
+  const deadline = normalizeDataKey(ao.dateLimite);
+  if (!buyer || !title) return "";
+  return `${buyer}|${title}|${deadline}`;
+}
+
+function findProbableDuplicates(records: AoRecord[]): DuplicateGroup[] {
+  const groups = new Map<string, AoRecord[]>();
+  records.forEach((ao) => {
+    const key = duplicateKeyFor(ao);
+    if (!key) return;
+    groups.set(key, [...(groups.get(key) ?? []), ao]);
+  });
+  return [...groups.entries()]
+    .filter(([, rows]) => rows.length > 1)
+    .map(([key, rows]) => ({
+      key,
+      label: `${rows[0].client} · ${rows[0].sujet}`,
+      records: rows
+    }))
+    .slice(0, 10);
+}
+
+function averageQuality(records: AoRecord[]) {
+  const scored = records.flatMap((ao) => (ao.dataQuality ? [ao.dataQuality.completenessScore] : []));
+  if (!scored.length) return null;
+  return Math.round(scored.reduce((sum, score) => sum + score, 0) / scored.length);
+}
+
+function formatRunDate(value: string) {
+  if (!value) return "Jamais";
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(parsed));
+}
+
+function qualityTone(score: number | null) {
+  if (score === null) return "is-unassigned";
+  if (score >= 80) return "is-todo";
+  if (score >= 50) return "is-reassign";
+  return "is-urgent";
 }
 
 function hasRawValue(ao: AoRecord, field: string) {
@@ -261,6 +321,10 @@ export default async function OfficeManagerPage() {
   const pendingReassignments = data.records.filter(isPendingReassignment);
   const unassigned = data.records.filter((ao) => !ao.manager || ao.manager === "Non assigné");
   const urgent = data.records.filter(urgentByDeadline);
+  const scrapedQualityScore = averageQuality(data.scrapedRecords);
+  const incompleteScraped = data.scrapedRecords.filter((ao) => (ao.dataQuality?.completenessScore ?? 0) < 80);
+  const missingSourceProof = data.records.filter((ao) => ao.sourceKind !== "google-sheet" && !ao.sourceUrl);
+  const duplicateGroups = findProbableDuplicates(data.records);
   const adminQueue = data.records
     .filter((ao) => isPendingReassignment(ao) || ao.statut === "A QUALIFIER" || urgentByDeadline(ao) || !ao.manager || ao.manager === "Non assigné")
     .sort(sortAdminQueue)
@@ -374,6 +438,152 @@ export default async function OfficeManagerPage() {
           "is-todo"
         )}
       </div>
+
+      <section className="grid two-col" style={{ marginTop: 16 }}>
+        <div className="card section">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">Data quality</p>
+              <h2>Qualité acquisition</h2>
+            </div>
+            <Link className="btn btn--ghost btn--sm" href="#scraping-runs">
+              Logs sources
+            </Link>
+          </div>
+          <div className="office-action-grid office-action-grid--compact">
+            {actionCard(
+              "Score sources",
+              scrapedQualityScore ?? 0,
+              scrapedQualityScore === null ? "Aucun AO scrappé scoré" : "Complétude moyenne",
+              "#scraping-runs",
+              qualityTone(scrapedQualityScore)
+            )}
+            {actionCard("AO incomplets", incompleteScraped.length, "Champs source à enrichir", "#data-quality-details", "is-reassign")}
+            {actionCard("Preuves source", missingSourceProof.length, "URLs sources manquantes", "#data-quality-details", "is-urgent")}
+            {actionCard("Doublons", duplicateGroups.length, "Groupes probables", "#duplicates", "is-unassigned")}
+          </div>
+          <div className="pipe-wrap" id="data-quality-details" style={{ marginTop: 12 }}>
+            <table className="pipe">
+              <thead>
+                <tr>
+                  <th>AO</th>
+                  <th>Source</th>
+                  <th className="r">Qualité</th>
+                  <th>Alertes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {incompleteScraped.slice(0, 8).map((ao) => (
+                  <tr key={`${ao.sourceTab}-${ao.aoNum}-quality`}>
+                    <td>
+                      <Link href={aoHref(ao)}>
+                        <span className="ao-num">{ao.displayAoNum}</span>
+                      </Link>
+                    </td>
+                    <td>{ao.sourceName || ao.sourceTab}</td>
+                    <td className="num">{ao.dataQuality?.completenessScore ?? 0}%</td>
+                    <td>{ao.dataQuality?.warnings.join(" · ") || ao.dataQuality?.missingFields.join(", ") || "À vérifier"}</td>
+                  </tr>
+                ))}
+                {incompleteScraped.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="muted">
+                      Aucun AO scrappé incomplet dans le cache courant.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card section" id="scraping-runs">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">Scraping run log</p>
+              <h2>Sources acquisition</h2>
+            </div>
+            <span className="muted">Mode : {data.sourceMode}</span>
+          </div>
+          <div className="pipe-wrap">
+            <table className="pipe">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Dernier run</th>
+                  <th className="r">AO</th>
+                  <th>État</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.sourceReport.map((source) => (
+                  <tr key={source.sourceName}>
+                    <td>{source.sourceName}</td>
+                    <td>{formatRunDate(source.collectedAt)}</td>
+                    <td className="num">{source.count}</td>
+                    <td>
+                      <span className={`office-priority ${source.errors.length ? "office-priority--urgent" : "office-priority--follow"}`}>
+                        {source.errors.length ? `${source.errors.length} erreur(s)` : "OK"}
+                      </span>
+                      {source.errors.length ? <div className="muted">{source.errors.slice(0, 2).join(" · ")}</div> : null}
+                    </td>
+                  </tr>
+                ))}
+                {data.sourceReport.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="muted">
+                      Aucun run source disponible. Déclencher un rafraîchissement depuis le dashboard.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section className="card section" id="duplicates" style={{ marginTop: 16 }}>
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">Dédoublonnage avancé</p>
+            <h2>Doublons probables à arbitrer</h2>
+          </div>
+          <span className="muted">{duplicateGroups.length} groupe(s)</span>
+        </div>
+        <div className="pipe-wrap">
+          <table className="pipe">
+            <thead>
+              <tr>
+                <th>Groupe</th>
+                <th>Occurrences</th>
+                <th>Sources</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {duplicateGroups.map((group) => (
+                <tr key={group.key}>
+                  <td>{group.label}</td>
+                  <td>{group.records.length}</td>
+                  <td>{[...new Set(group.records.map((ao) => ao.sourceName || ao.sourceTab))].join(" · ")}</td>
+                  <td>
+                    <Link className="btn btn--ghost btn--sm" href={aoHref(group.records[0])}>
+                      Ouvrir référence
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+              {duplicateGroups.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="muted">
+                    Aucun doublon probable détecté avec la clé acheteur + sujet + échéance.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="grid two-col" id="todo-office" style={{ marginTop: 16 }}>
         <div className="card section">

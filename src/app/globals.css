@@ -621,6 +621,10 @@ h3 {
   margin: 0 0 16px;
 }
 
+.office-action-grid--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .office-action-card {
   display: grid;
   gap: 6px;
