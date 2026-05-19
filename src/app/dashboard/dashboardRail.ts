@@ -126,6 +126,7 @@ export function buildDashboardRail(
     {
       title: "Outils",
       items: [
+        { label: "🧑‍💼 Office Manager", href: "/office-manager" },
         { label: "💬 Ouvrir SiaGPT", href: "/chat" },
         { label: "⚙ Référentiels", href: "/settings" },
         { label: "🛡 Règles", href: "/rules" },

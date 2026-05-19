@@ -223,6 +223,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <Link className="btn btn--ghost" href="/settings">
               Référentiels
             </Link>
+            <Link className="btn btn--ghost" href="/office-manager">
+              Office Manager
+            </Link>
             <Link className="btn btn--ghost" href="/rules">
               Règles
             </Link>

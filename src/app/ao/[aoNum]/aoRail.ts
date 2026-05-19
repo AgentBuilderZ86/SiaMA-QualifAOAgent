@@ -30,6 +30,7 @@ export function buildAoRail(aoHref: string, active: AoRailActive, workflowStatut
       title: "Navigation",
       items: [
         { label: "📊 Pipeline", href: "/dashboard" },
+        { label: "🧑‍💼 Office Manager", href: "/office-manager" },
         { label: "💬 SiaGPT", href: "/chat" },
         { label: "📋 Audit", href: "/audit" }
       ]
