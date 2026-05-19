@@ -12,6 +12,7 @@ export default async function AuditPage() {
       title: "Pilotage",
       items: [
         { label: "📊 Pipeline", href: "/dashboard" },
+        { label: "🧑‍💼 Office Manager", href: "/office-manager" },
         { label: "💬 SiaGPT", href: "/chat" }
       ]
     },

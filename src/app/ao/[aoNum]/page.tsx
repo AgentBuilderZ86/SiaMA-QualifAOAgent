@@ -94,6 +94,17 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
         </div>
       </div>
 
+      <section className="manager-action-banner">
+        <div>
+          <p className="eyebrow">Action manager</p>
+          <h2>Changer le statut ou proposer une réaffectation</h2>
+          <p className="muted">La décision est historisée et alimente les règles via le feedback manager.</p>
+        </div>
+        <Link className="btn btn--accent" href={`/ao/${aoHref}#pilotage-manager`}>
+          Réaffecter / statuer
+        </Link>
+      </section>
+
       <DecisionPanel ao={ao} qualification={qualification} />
 
       <section className="grid two-col" style={{ marginTop: 16 }}>

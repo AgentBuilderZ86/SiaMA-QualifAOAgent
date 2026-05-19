@@ -98,6 +98,7 @@ export default async function ChatPage() {
       title: "Outils",
       items: [
         { label: "📊 Pipeline", href: "/dashboard" },
+        { label: "🧑‍💼 Office Manager", href: "/office-manager" },
         { label: "📋 Audit", href: "/audit" },
         { label: "🛡 Règles", href: "/rules" },
         { label: "⚙ Référentiels", href: "/settings" }
