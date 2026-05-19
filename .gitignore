@@ -25,5 +25,9 @@ pnpm-debug.log*
 output/
 scripts/__pycache__/
 
+# Playwright test artifacts
+test-results/
+playwright-report/
+
 # Fichiers temporaires Office (verrou)
 ~$*
