@@ -6,6 +6,7 @@ import { isPendingReassignment } from "@/lib/managerGovernance";
 import { requireUser } from "@/lib/auth";
 import { AppShell, PageHeader, Pill, type SideRailGroup } from "@/components/shell";
 import type { AoRecord, QualificationFiche } from "@/lib/aoTypes";
+import { filterOfficeManagerTodoRecords } from "@/lib/officeManagerTodoScope";
 
 export const dynamic = "force-dynamic";
 
@@ -329,7 +330,7 @@ export default async function OfficeManagerPage() {
     .filter((ao) => isPendingReassignment(ao) || ao.statut === "A QUALIFIER" || urgentByDeadline(ao) || !ao.manager || ao.manager === "Non assigné")
     .sort(sortAdminQueue)
     .slice(0, 30);
-  const todoRows = data.records
+  const todoRows = filterOfficeManagerTodoRecords(data.records)
     .map((ao) => ({ ao, todos: buildOfficeTodos(ao) }))
     .filter((row) => row.todos.length > 0)
     .sort((a, b) => a.todos[0].priority - b.todos[0].priority || sortAdminQueue(a.ao, b.ao));
