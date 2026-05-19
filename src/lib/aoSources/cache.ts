@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { AoCachePayload } from "@/lib/aoSources/types";
-import { dedupeCollectedAos } from "@/lib/aoSources/normalize";
+import { collectedAoToRecord, dedupeCollectedAos } from "@/lib/aoSources/normalize";
 import { activeAoSourceConnectors } from "@/lib/aoSources/registry";
+import { refreshAoDocumentCache } from "@/lib/aoSources/documentCache";
 
 const EMPTY_CACHE: AoCachePayload = {
   generatedAt: "",
@@ -98,5 +99,8 @@ export async function refreshAoCache(): Promise<AoCachePayload> {
     }))
   };
   await writeAoCache(payload);
+  if (process.env.AO_DOCUMENT_SCRAPE_ON_REFRESH === "true") {
+    await refreshAoDocumentCache(records.map(collectedAoToRecord));
+  }
   return payload;
 }
