@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { FinancialSimulationView, parseJsonField, ProposalSectionView } from "./proposalArtifacts";
 import { QualificationIntelligenceView } from "./qualificationView";
 import { DecisionPanel } from "./decisionPanel";
+import { ManagerGovernancePanel } from "./managerGovernance";
 import { WorkflowFlow } from "./workflow";
 import { AppShell, PageHeader, Pill } from "@/components/shell";
 import { delayLabel } from "@/lib/aoDeadline";
@@ -94,6 +95,10 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
 
       <section className="grid two-col" style={{ marginTop: 16 }}>
         <WorkflowFlow ao={ao} enabled={workflowAvailable} />
+        <ManagerGovernancePanel ao={ao} enabled={workflowAvailable} user={user} />
+      </section>
+
+      <section className="grid two-col" style={{ marginTop: 16 }}>
         <div className="card section">
           <div className="section-header">
             <div>

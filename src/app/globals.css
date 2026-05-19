@@ -762,6 +762,46 @@ table.pipe td.num,
   gap: 10px;
 }
 
+.governance-status {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-1);
+}
+
+.governance-status > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-2);
+  background: var(--surface-1);
+}
+
+.governance-status span {
+  font: var(--type-meta);
+  color: var(--fg-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.governance-status strong {
+  font: var(--type-body);
+  color: var(--fg-0);
+}
+
+.reassignment-review {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--status-pitch-bg);
+  border-radius: var(--r-2);
+  background: var(--reco-watch-bg);
+}
+
 .info-grid {
   display: grid;
   gap: 12px;
@@ -3013,6 +3053,7 @@ table.pipe td.num,
   .decision-panel,
   .decision-content,
   .finance-main,
+  .governance-status,
   .info-grid {
     grid-template-columns: 1fr;
   }

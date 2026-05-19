@@ -10,6 +10,7 @@ import {
 import { getSheetsConfigStatus } from "@/lib/google";
 import {
   DEFAULT_REFERENTIELS,
+  FEEDBACK_RULE_HEADERS,
   HIST_HEADERS,
   PIPELINE_HEADERS,
   REF_HEADERS,
@@ -30,7 +31,8 @@ const tabs = {
   ng: process.env.SHEET_NG || "NO GO",
   pipeline: process.env.SHEET_PIPELINE || "Pipeline BO-Propale",
   history: process.env.SHEET_HIST || "Historique",
-  referentials: process.env.SHEET_REFERENTIALS || "Référentiels"
+  referentials: process.env.SHEET_REFERENTIALS || "Référentiels",
+  feedback: process.env.SHEET_FEEDBACK || "Feedback_Règles"
 };
 
 const sourceTabs: Array<{ name: string; fallback: AoStatus }> = [
@@ -155,6 +157,7 @@ export class GoogleSheetsAoRepository {
   async ensureBaseSheets() {
     await ensureSheet(tabs.pipeline, PIPELINE_HEADERS);
     await ensureSheet(tabs.history, HIST_HEADERS);
+    await ensureSheet(tabs.feedback, FEEDBACK_RULE_HEADERS);
     const refHeaders = await ensureSheet(tabs.referentials, REF_HEADERS);
     const { records } = await readSheetWithMeta(tabs.referentials);
     if (records.length === 0) {
@@ -241,6 +244,11 @@ export class GoogleSheetsAoRepository {
       Acteur: event.actor,
       Note: event.note
     });
+  }
+
+  async appendRuleFeedback(row: SheetRow) {
+    const headers = await ensureSheet(tabs.feedback, FEEDBACK_RULE_HEADERS);
+    await appendRow(tabs.feedback, headers, row);
   }
 
   async transition(aoNum: string, toStatus: AoStatus, actor: string, note = "", updates: SheetRow = {}) {

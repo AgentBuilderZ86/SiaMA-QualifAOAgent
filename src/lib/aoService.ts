@@ -22,7 +22,15 @@ import { readAoCache } from "@/lib/aoSources/cache";
 import { generateIntelligentQualification } from "@/lib/qualification/intelligence";
 import { operationalDeadlineSubset, urgentByDeadline } from "@/lib/aoDeadline";
 import type { SheetRow } from "@/lib/google";
-import type { AoRecord, AoStatus, ClosureReport, FinancialSimulation, QualificationFiche } from "@/lib/aoTypes";
+import { AO_STATUSES, type AoRecord, type AoStatus, type ClosureReport, type FinancialSimulation, type QualificationFiche } from "@/lib/aoTypes";
+import {
+  buildManagerFeedbackDecision,
+  isDifferentManager,
+  isPendingReassignment,
+  reassignmentStatusFromDecision,
+  type OpportunityGovernanceInput,
+  type ReassignmentDecision
+} from "@/lib/managerGovernance";
 
 export type DashboardData = {
   configured: boolean;
@@ -139,6 +147,130 @@ export async function getAoDetail(aoNum: string) {
 
 export async function transitionAo(aoNum: string, toStatus: AoStatus, actor: string, note = "") {
   await aoRepository.transition(aoNum, toStatus, actor, note);
+}
+
+function assertStatus(value: string): AoStatus {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!AO_STATUSES.includes(normalized as AoStatus)) {
+    throw new Error("Statut opportunité invalide.");
+  }
+  return normalized as AoStatus;
+}
+
+function requiredJustification(value: string) {
+  const text = String(value || "").trim();
+  if (text.length < 8) {
+    throw new Error("La justification manager doit contenir au moins 8 caractères.");
+  }
+  return text;
+}
+
+async function appendGovernanceFeedback(params: {
+  ao: AoRecord;
+  actor: string;
+  decisionManager: string;
+  motif: string;
+  statut: string;
+  recommendedManager?: string;
+  typeFeedback: string;
+}) {
+  await aoRepository.appendRuleFeedback({
+    timestamp: new Date().toISOString(),
+    ao_num: params.ao.aoNum,
+    decision_ia: params.ao.decisionIa || "Non renseigné",
+    decision_manager: params.decisionManager,
+    motif_manager: params.motif,
+    statut: params.statut,
+    manager_actuel: params.ao.manager || "Non assigné",
+    manager_recommande: params.recommendedManager || params.ao.recommendedManager || "",
+    type_feedback: params.typeFeedback,
+    acteur: params.actor,
+    source: "SiaGPT AO Agent"
+  });
+}
+
+export async function updateOpportunityGovernance(aoNum: string, actor: string, input: OpportunityGovernanceInput) {
+  const ao = await aoRepository.findAo(aoNum);
+  if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
+
+  const status = assertStatus(input.status);
+  const justification = requiredJustification(input.justification);
+  const recommendedManager = String(input.recommendedManager || "").trim();
+  const updates: SheetRow = {
+    "Justification changement statut": justification
+  };
+
+  if (recommendedManager) {
+    updates["Manager recommandé"] = recommendedManager;
+  }
+
+  if (isDifferentManager(ao.manager, recommendedManager)) {
+    updates["Manager précédent"] = ao.manager || "Non assigné";
+    updates["Statut réaffectation"] = "À valider";
+    updates["Réaffectation proposée par"] = actor;
+    updates["Justification réaffectation"] = justification;
+    updates["Décision réaffectation par"] = "";
+    updates["Justification décision réaffectation"] = "";
+  }
+
+  const feedbackDecision = buildManagerFeedbackDecision(status, recommendedManager);
+  await aoRepository.transition(ao.aoNum, status, actor, feedbackDecision, updates);
+  await appendGovernanceFeedback({
+    ao,
+    actor,
+    decisionManager: feedbackDecision,
+    motif: justification,
+    statut: status,
+    recommendedManager,
+    typeFeedback: recommendedManager ? "changement_statut_reaffectation" : "changement_statut"
+  });
+}
+
+export async function decideOpportunityReassignment(
+  aoNum: string,
+  actor: string,
+  decision: ReassignmentDecision,
+  justificationValue: string
+) {
+  const ao = await aoRepository.findAo(aoNum);
+  if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
+  if (!isPendingReassignment(ao)) {
+    throw new Error("Aucune proposition de réaffectation en attente pour cet AO.");
+  }
+
+  const justification = requiredJustification(justificationValue);
+  const status = reassignmentStatusFromDecision(decision);
+  const recommendedManager = ao.recommendedManager || "";
+  const updates: SheetRow = {
+    "Statut réaffectation": status,
+    "Décision réaffectation par": actor,
+    "Justification décision réaffectation": justification
+  };
+
+  if (decision === "accept") {
+    updates.Manager = recommendedManager;
+    updates["Manager recommandé"] = recommendedManager;
+    updates["Manager précédent"] = ao.manager || "Non assigné";
+  }
+
+  await aoRepository.upsertPipeline(ao, ao.statut, updates);
+  await aoRepository.appendHistory({
+    timestamp: new Date().toISOString(),
+    aoNum: ao.aoNum,
+    fromStatus: ao.statut,
+    toStatus: ao.statut,
+    actor,
+    note: `Réaffectation ${status.toLowerCase()} par le manager recommandé`
+  });
+  await appendGovernanceFeedback({
+    ao,
+    actor,
+    decisionManager: `Réaffectation ${status.toLowerCase()} · ${recommendedManager}`,
+    motif: justification,
+    statut: ao.statut,
+    recommendedManager,
+    typeFeedback: decision === "accept" ? "reaffectation_acceptee" : "reaffectation_refusee"
+  });
 }
 
 export async function saveQualification(aoNum: string, actor: string, formData: FormData) {
