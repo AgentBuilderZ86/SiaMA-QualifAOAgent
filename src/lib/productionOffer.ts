@@ -26,7 +26,8 @@ export const PRODUCTION_OFFER_STAGES: ProductionOfferStage[] = [
     checks: [
       "Sélectionner le bench CV adapté aux critères du RC/CPS.",
       "Qualifier les références similaires et preuves demandées.",
-      "Préparer deux formats : gabarit Sia et format imposé par l'AO."
+      "Préparer deux formats : gabarit Sia et format imposé par l'AO.",
+      "Contrôler le module scoring CV avant revue finale."
     ],
     proposalSections: ["Équipe et références", "CV & références"]
   },

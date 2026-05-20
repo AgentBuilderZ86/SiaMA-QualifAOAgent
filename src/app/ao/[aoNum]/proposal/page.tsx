@@ -7,6 +7,7 @@ import { FinancialSimulationView, parseJsonField, ProposalSectionView } from "..
 import { AppShell, PageHeader, Pill } from "@/components/shell";
 import { buildAoRail } from "../aoRail";
 import { buildProductionOfferChecklist, PRODUCTION_OFFER_STAGES } from "@/lib/productionOffer";
+import { buildCvScoringSummary, parseQualificationForCvScoring } from "@/lib/cvScoring";
 
 export default async function ProposalPage({ params }: { params: Promise<{ aoNum: string }> }) {
   const user = await requireUser();
@@ -18,6 +19,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ aoNum
   const simulation = parseJsonField(pipeline?.["Simulation financière"]);
   const proposal = parseJsonField(pipeline?.["Sections propale"]);
   const productionOffer = buildProductionOfferChecklist(ao);
+  const cvScoring = buildCvScoringSummary(ao, parseQualificationForCvScoring(pipeline?.["Fiche qualification"]));
 
   return (
     <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "proposal", ao.statut)}>
@@ -69,6 +71,32 @@ export default async function ProposalPage({ params }: { params: Promise<{ aoNum
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="card section" style={{ marginBottom: 16 }}>
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">Scoring CV</p>
+            <h2>Adaptations CV & références</h2>
+          </div>
+          <span className="office-priority office-priority--follow">{cvScoring.score}/100 · {cvScoring.statusLabel}</span>
+        </div>
+        <div className="grid two-col" style={{ marginTop: 12 }}>
+          {cvScoring.items.map((entry) => (
+            <div className="info-item" key={entry.id}>
+              <span>{entry.score}/100 · {entry.evidence}</span>
+              <strong>{entry.label}</strong>
+              <ul>
+                {entry.adaptations.map((adaptation) => (
+                  <li key={adaptation}>{adaptation}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <p className="muted t-meta" style={{ marginTop: 12 }}>
+          Profils détectés : {cvScoring.requiredProfiles.length ? cvScoring.requiredProfiles.slice(0, 6).join(" · ") : "à confirmer depuis RC/CPS"}
+        </p>
       </section>
 
       <section className="grid two-col">
