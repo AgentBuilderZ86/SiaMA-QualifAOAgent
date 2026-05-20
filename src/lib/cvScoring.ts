@@ -11,12 +11,50 @@ export type CvScoringItem = {
   adaptations: string[];
 };
 
+export type CvProfileCoverage = {
+  profile: string;
+  icon: string;
+  status: "required" | "missing";
+  statusLabel: string;
+  evidence: string;
+};
+
 export type CvScoringSummary = {
   score: number;
   status: CvScoringStatus;
   statusLabel: string;
   items: CvScoringItem[];
   requiredProfiles: string[];
+  profileCoverage: CvProfileCoverage[];
+};
+
+export type UploadedCvForAdaptation = {
+  name: string;
+  text: string;
+  warning?: string;
+  targetRole?: string;
+};
+
+export type CvAdaptationRequirement = {
+  requirement: string;
+  matched: boolean;
+  evidence: string;
+  adaptation: string;
+};
+
+export type CvAdaptationResult = {
+  cvName: string;
+  targetRole: string;
+  scoreBefore: number;
+  scoreAfter: number;
+  targetScore: number;
+  adaptedTitle: string;
+  adaptedSummary: string;
+  rewrittenBlocks: Array<{ title: string; bullets: string[] }>;
+  requirements: CvAdaptationRequirement[];
+  warnings: string[];
+  sourceExcerpt: string;
+  generatedAt: string;
 };
 
 export type UploadedCvForAdaptation = {
@@ -145,6 +183,39 @@ function scoreStatus(score: number): CvScoringStatus {
   return "missing";
 }
 
+function iconForProfile(profile: string) {
+  const normalized = normalize(profile);
+  if (/(architect|urbanis|si|solution)/.test(normalized)) return "🧭";
+  if (/(chef|directeur|manager|pmo|pilotage|projet)/.test(normalized)) return "📋";
+  if (/(data|donnee|gouvernance|bi|analytics|mdm)/.test(normalized)) return "🧠";
+  if (/(cyber|secur|risque|audit)/.test(normalized)) return "🛡️";
+  if (/(finance|budget|controle|tjm)/.test(normalized)) return "💰";
+  if (/(dev|develop|ingenieur|technique)/.test(normalized)) return "🛠️";
+  return "👤";
+}
+
+function buildProfileCoverage(requiredProfiles: string[]): CvProfileCoverage[] {
+  if (!requiredProfiles.length) {
+    return [
+      {
+        profile: "Profils à confirmer",
+        icon: "⚠️",
+        status: "missing",
+        statusLabel: "Non détecté",
+        evidence: "Aucun profil requis n'a été isolé dans les documents chargés."
+      }
+    ];
+  }
+
+  return requiredProfiles.map((profile) => ({
+    profile,
+    icon: iconForProfile(profile),
+    status: "required",
+    statusLabel: "À couvrir",
+    evidence: "Profil exigé extrait de la fiche qualification / documents AO."
+  }));
+}
+
 function item(params: Omit<CvScoringItem, "status">): CvScoringItem {
   return {
     ...params,
@@ -225,7 +296,87 @@ export function buildCvScoringSummary(ao: AoRecord, qualification?: Qualificatio
     status,
     statusLabel: status === "covered" ? "CV prêts" : status === "attention" ? "Adaptations à finaliser" : "À cadrer",
     items,
-    requiredProfiles
+    requiredProfiles,
+    profileCoverage: buildProfileCoverage(requiredProfiles)
+  };
+}
+
+export function buildCvAdaptation(
+  ao: AoRecord,
+  qualification: QualificationFiche | null | undefined,
+  uploaded: UploadedCvForAdaptation
+): CvAdaptationResult {
+  const scoring = buildCvScoringSummary(ao, qualification);
+  const cvText = text(uploaded.text);
+  const cvLines = lines(cvText);
+  const requirements = scoring.requiredProfiles.length
+    ? scoring.requiredProfiles
+    : splitRequirements(qualification?.profils, qualification?.criteres, qualification?.documentExtract).slice(0, 8);
+  const normalizedCv = normalize(cvText);
+  const requirementRows: CvAdaptationRequirement[] = requirements.map((requirement) => {
+    const tokens = keywordTokens(requirement);
+    const matchedTokens = tokens.filter((token) => normalizedCv.includes(token));
+    const evidence = bestEvidence(cvLines, requirement);
+    return {
+      requirement,
+      matched: matchedTokens.length > 0,
+      evidence: evidence || "Aucune preuve textuelle détectée dans le CV uploadé.",
+      adaptation: evidence
+        ? `Reformuler autour de l'exigence "${requirement}" en s'appuyant sur : ${evidence}`
+        : `Ne pas inventer : ajouter une preuve réelle ou marquer "${requirement}" comme non couvert.`
+    };
+  });
+  const matchedRatio = requirementRows.length
+    ? requirementRows.filter((row) => row.matched).length / requirementRows.length
+    : cvText
+      ? 0.25
+      : 0;
+  const scoreBefore = Math.round(matchedRatio * 100);
+  const scoreAfter = Math.min(100, scoreBefore + (cvText ? 20 : 0) + (requirementRows.some((row) => row.evidence) ? 10 : 0));
+  const role = text(uploaded.targetRole) || requirements[0] || "Profil à positionner";
+  const experienceBullets = evidenceLines(cvLines, requirements, ["data", "si", "pmo", "gouvernance", "architecture", "projet"]);
+  const referenceBullets = evidenceLines(cvLines, requirements, ["client", "reference", "référence", "projet", "mission", "secteur"]);
+  const warnings = [
+    uploaded.warning || "",
+    cvText ? "" : "CV vide ou non lisible.",
+    requirementRows.length ? "" : "Exigences AO insuffisantes : adaptation limitée aux informations disponibles.",
+    ...requirementRows.filter((row) => !row.matched).map((row) => `Exigence non couverte par preuve CV : ${row.requirement}`)
+  ].filter(Boolean);
+
+  return {
+    cvName: uploaded.name || "CV sans nom",
+    targetRole: role,
+    scoreBefore,
+    scoreAfter,
+    targetScore: 100,
+    adaptedTitle: `${role} — CV adapté pour ${ao.client || "client"} / ${ao.displayAoNum || ao.aoNum}`,
+    adaptedSummary: experienceBullets.length
+      ? `Profil à positionner sur ${ao.sujet}. Les éléments ci-dessous reformulent uniquement des preuves présentes dans le CV uploadé pour répondre aux exigences AO détectées.`
+      : "Adaptation limitée : aucune ligne probante exploitable n'a été détectée dans le CV uploadé.",
+    rewrittenBlocks: [
+      {
+        title: "Accroche ciblée",
+        bullets: experienceBullets.length
+          ? experienceBullets.slice(0, 3).map((line) => `Mettre en avant pour l'AO : ${line}`)
+          : ["À compléter avec une preuve réelle issue du CV."]
+      },
+      {
+        title: "Expériences à prioriser",
+        bullets: experienceBullets.length ? experienceBullets.slice(0, 5).map((line) => `Reformulation proposée : ${line}`) : ["Aucune expérience pertinente détectée automatiquement."]
+      },
+      {
+        title: "Références et preuves",
+        bullets: referenceBullets.length ? referenceBullets.slice(0, 4).map((line) => `Preuve à citer : ${line}`) : ["Références similaires à confirmer sans invention."]
+      },
+      {
+        title: "Adaptations format AO",
+        bullets: scoring.items.find((item) => item.id === "ao-format")?.adaptations ?? []
+      }
+    ],
+    requirements: requirementRows,
+    warnings,
+    sourceExcerpt: cvLines.slice(0, 12).map((line) => compact(line, 180)).join("\n"),
+    generatedAt: new Date().toISOString()
   };
 }
 
