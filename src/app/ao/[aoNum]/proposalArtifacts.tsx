@@ -1,4 +1,5 @@
 import type { FinancialSimulation, ProposalSection } from "@/lib/aoTypes";
+import type { CvAdaptationResult } from "@/lib/cvScoring";
 
 function formatDh(value: unknown) {
   const numberValue = Number(value || 0);
@@ -171,6 +172,52 @@ export function ProposalSectionView({ proposal }: { proposal: unknown }) {
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+function normalizeCvAdaptations(value: unknown): CvAdaptationResult[] {
+  if (!value) return [];
+  const list = Array.isArray(value) ? value : [value];
+  return list.filter((item): item is CvAdaptationResult => Boolean(item && typeof item === "object" && "cvName" in item));
+}
+
+export function CvAdaptationView({ adaptations }: { adaptations: unknown }) {
+  const items = normalizeCvAdaptations(adaptations);
+  if (!items.length) return <p className="muted">Aucune adaptation CV enregistrée.</p>;
+
+  return (
+    <div className="grid two-col">
+      {items.map((adaptation) => (
+        <div className="info-item" key={`${adaptation.cvName}-${adaptation.generatedAt}`}>
+          <span>
+            {adaptation.scoreBefore}/100 → {adaptation.scoreAfter}/100 · cible {adaptation.targetScore}/100
+          </span>
+          <strong>{adaptation.adaptedTitle}</strong>
+          <p>{adaptation.adaptedSummary}</p>
+          {adaptation.rewrittenBlocks.map((block) => (
+            <div key={block.title} style={{ marginTop: 10 }}>
+              <span>{block.title}</span>
+              <ul>
+                {block.bullets.map((bullet) => (
+                  <li key={bullet}>{bullet}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          <details className="collapsible-panel" style={{ marginTop: 10 }}>
+            <summary>Conformité exigences AO</summary>
+            <ul>
+              {adaptation.requirements.map((row) => (
+                <li key={row.requirement}>
+                  <strong>{row.matched ? "OK" : "À couvrir"}</strong> — {row.requirement} : {row.evidence}
+                </li>
+              ))}
+            </ul>
+          </details>
+          {adaptation.warnings.length ? <p className="muted">Alertes : {adaptation.warnings.join(" · ")}</p> : null}
+        </div>
+      ))}
     </div>
   );
 }

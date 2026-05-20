@@ -12,6 +12,7 @@ import {
 } from "@/lib/atelierStrategie";
 import { buildAtelierSystemPrompt, buildAtelierUserPayload } from "@/lib/atelierPrompt";
 import { extractDocumentSections, extractUploadedDocument, summarizeDocumentText } from "@/lib/documents";
+import { buildCvAdaptation, parseQualificationForCvScoring, type CvAdaptationResult, type UploadedCvForAdaptation } from "@/lib/cvScoring";
 import { extractKeyMetadata, isPlaceholderSection } from "@/lib/qualification/documentMetadata";
 import { filenameSignalsPrefix, parseFilenameSignals } from "@/lib/qualification/filenameSignals";
 import { simulateFinancials } from "@/lib/finance";
@@ -420,6 +421,45 @@ export async function saveProposalSection(aoNum: string, actor: string, section:
     note: `Section propale générée : ${section}`
   });
   return proposal;
+}
+
+function uploadedCvFiles(formData: FormData) {
+  return formData.getAll("cv").filter((file): file is File => file instanceof File && file.size > 0);
+}
+
+export async function saveCvAdaptations(aoNum: string, actor: string, formData: FormData): Promise<CvAdaptationResult[]> {
+  const ao = await aoRepository.findAo(aoNum);
+  if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
+  const files = uploadedCvFiles(formData);
+  if (!files.length) throw new Error("Ajoutez au moins un CV à adapter.");
+
+  const targetRole = String(formData.get("targetRole") || "");
+  const qualification = parseQualificationForCvScoring(ao.raw?.["Fiche qualification"]);
+  const uploaded: UploadedCvForAdaptation[] = await Promise.all(
+    files.map(async (file) => {
+      const extracted = await extractUploadedDocument(file);
+      return {
+        name: extracted.name || file.name,
+        text: extracted.text,
+        warning: extracted.warning,
+        targetRole
+      };
+    })
+  );
+  const adaptations = uploaded.map((cv) => buildCvAdaptation(ao, qualification, cv));
+
+  await aoRepository.upsertPipeline(ao, ao.statut, {
+    "Adaptations CV": JSON.stringify(adaptations)
+  });
+  await aoRepository.appendHistory({
+    timestamp: new Date().toISOString(),
+    aoNum,
+    fromStatus: ao.statut,
+    toStatus: ao.statut,
+    actor,
+    note: `Adaptations CV générées : ${adaptations.map((item) => item.cvName).join(", ")}`
+  });
+  return adaptations;
 }
 
 export async function savePitchNotes(aoNum: string, actor: string, notes: string) {

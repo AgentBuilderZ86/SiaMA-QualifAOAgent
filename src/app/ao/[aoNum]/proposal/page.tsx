@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAoDetail } from "@/lib/ao";
 import { requireUser } from "@/lib/auth";
-import { proposalAction, simulationAction, transitionAction } from "../../actions";
-import { FinancialSimulationView, parseJsonField, ProposalSectionView } from "../proposalArtifacts";
+import { cvAdaptationAction, proposalAction, simulationAction, transitionAction } from "../../actions";
+import { CvAdaptationView, FinancialSimulationView, parseJsonField, ProposalSectionView } from "../proposalArtifacts";
 import { AppShell, PageHeader, Pill } from "@/components/shell";
 import { buildAoRail } from "../aoRail";
 import { buildProductionOfferChecklist, PRODUCTION_OFFER_STAGES } from "@/lib/productionOffer";
@@ -18,6 +18,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ aoNum
   const aoHref = encodeURIComponent(ao.aoNum);
   const simulation = parseJsonField(pipeline?.["Simulation financière"]);
   const proposal = parseJsonField(pipeline?.["Sections propale"]);
+  const cvAdaptations = parseJsonField(pipeline?.["Adaptations CV"]);
   const productionOffer = buildProductionOfferChecklist(ao);
   const cvScoring = buildCvScoringSummary(ao, parseQualificationForCvScoring(pipeline?.["Fiche qualification"]));
 
@@ -150,6 +151,35 @@ export default async function ProposalPage({ params }: { params: Promise<{ aoNum
             </button>
           </div>
         </form>
+      </section>
+
+      <section className="card section" style={{ marginTop: 16 }}>
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">Adaptation CV uploadés</p>
+            <h2>Reformuler les CV pour maximiser la conformité AO</h2>
+          </div>
+          <span className="muted">Aucune expérience inventée · preuves CV conservées</span>
+        </div>
+        <form action={cvAdaptationAction} className="form-grid" style={{ marginTop: 12 }}>
+          <input type="hidden" name="aoNum" value={ao.aoNum} />
+          <div className="field">
+            <label htmlFor="targetRole">Rôle cible / lot visé</label>
+            <input id="targetRole" name="targetRole" placeholder="Ex. Chef de projet data, Architecte SI…" />
+          </div>
+          <div className="field">
+            <label htmlFor="cv">CV à adapter (.pdf, .docx, .txt, .zip)</label>
+            <input id="cv" name="cv" type="file" multiple required />
+          </div>
+          <div>
+            <button className="btn btn--accent" type="submit">
+              Adapter les CV pour cet AO
+            </button>
+          </div>
+        </form>
+        <div style={{ marginTop: 16 }}>
+          <CvAdaptationView adaptations={cvAdaptations} />
+        </div>
       </section>
 
       <section className="card section" style={{ marginTop: 16 }}>
