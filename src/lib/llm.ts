@@ -164,6 +164,7 @@ export async function generateProposalSection(ao: AoRecord, section: string, con
   const content = await generateWithGuardrails({
     task: [
       `Rédiger la section de propale : ${section}`,
+      "Si la section relève de la production offre, traiter explicitement les points suivants selon le libellé demandé : CV & références (sélection bench, format Sia, format AO), offre technique (cadrage, suivi, staffage, fermeture), offre financière (simulation, marges, groupement, freelance), revue & envoi (cross-check J+10-15, envoi J+16, relance J+17).",
       "Retourne exclusivement un objet JSON valide avec les clés suivantes :",
       "section, content, slideTitle, keyMessages, bodyText, diagramTitle, diagramMermaid, pptCopyBlock, sources.",
       "Le contenu doit être directement copiable dans PowerPoint.",
