@@ -1,35 +1,6 @@
 import type { AoSourceConnector, CollectedAo } from "@/lib/aoSources/types";
+import { MOROCCO_WEB_AO_SOURCES, type MoroccoAoSourceRegistryEntry } from "@/lib/aoSources/moroccoSourceRegistry";
 import { fetchWithTimeout, extractPublicNoticeLinks, maxRecords, sourceResult, stripHtml } from "@/lib/aoSources/utils";
-
-type WebSeed = {
-  sourceName: string;
-  country: string;
-  homepage: string;
-  seeds: string[];
-};
-
-const marocPublic: WebSeed = {
-  sourceName: "Portail Marocain des Marches Publics",
-  country: "Maroc",
-  homepage: "https://www.marchespublics.gov.ma/",
-  seeds: [
-    "https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseHome",
-    "https://www.marchespublics.gov.ma/?page=entreprise.EntrepriseAdvancedSearch"
-  ]
-};
-
-const privateInstitutionalMarocSeeds: WebSeed = {
-  sourceName: "Grands comptes institutionnels prives Maroc",
-  country: "Maroc",
-  homepage: "https://www.groupebcp.com/",
-  seeds: [
-    "https://www.groupebcp.com/",
-    "https://attijari-sourcing.attijariwafabank.com/web_en/login.html",
-    "https://ocpgroup.ma/Contact-us",
-    "https://relationfournisseurs.ocp.ma/",
-    "https://www.one.ma/FR/pages/aoselect.asp?esp=2&id1=7&id2=64&id3=54&t2=1&t3=1"
-  ]
-};
 
 function noticeIdFromUrl(url: string) {
   try {
@@ -46,7 +17,7 @@ function titleFromHtml(html: string, fallback: string) {
   return stripHtml(title || fallback);
 }
 
-async function collectSeed(seed: WebSeed) {
+async function collectSeed(seed: MoroccoAoSourceRegistryEntry) {
   const collectedAt = new Date().toISOString();
   const errors: string[] = [];
   const records: CollectedAo[] = [];
@@ -63,7 +34,7 @@ async function collectSeed(seed: WebSeed) {
       const links = extractPublicNoticeLinks(html, seedUrl).slice(0, maxRecords() - records.length);
       for (const link of links) {
         records.push({
-          sourceKind: "public-web",
+          sourceKind: seed.kind,
           sourceName: seed.sourceName,
           sourceUrl: link.url,
           sourceNoticeId: noticeIdFromUrl(link.url),
@@ -76,7 +47,14 @@ async function collectSeed(seed: WebSeed) {
           estimatedBudget: "",
           currency: "",
           collectedAt,
-          raw: { seedUrl, label: link.label }
+          raw: {
+            seedUrl,
+            label: link.label,
+            registryId: seed.id,
+            accessMethod: seed.accessMethod,
+            documentHints: seed.documentHints.join(" | "),
+            evidenceUrls: seed.evidenceUrls.join(" | ")
+          }
         });
       }
     } catch (error) {
@@ -86,16 +64,17 @@ async function collectSeed(seed: WebSeed) {
   return sourceResult(seed.sourceName, records, errors);
 }
 
-export const marchesPublicsMarocConnector: AoSourceConnector = {
-  name: marocPublic.sourceName,
-  kind: "public-web",
-  homepage: marocPublic.homepage,
-  fetchAos: () => collectSeed(marocPublic)
-};
+export function buildMoroccoWebConnector(source: MoroccoAoSourceRegistryEntry): AoSourceConnector {
+  return {
+    name: source.sourceName,
+    kind: source.kind,
+    homepage: source.homepage,
+    fetchAos: () => collectSeed(source)
+  };
+}
 
-export const privateInstitutionalMarocConnector: AoSourceConnector = {
-  name: privateInstitutionalMarocSeeds.sourceName,
-  kind: "public-web",
-  homepage: privateInstitutionalMarocSeeds.homepage,
-  fetchAos: () => collectSeed(privateInstitutionalMarocSeeds)
-};
+export const moroccoPublicWebConnectors: AoSourceConnector[] = MOROCCO_WEB_AO_SOURCES.map(buildMoroccoWebConnector);
+
+export const marchesPublicsMarocConnector =
+  moroccoPublicWebConnectors.find((connector) => connector.name === "Portail Marocain des Marches Publics") ??
+  buildMoroccoWebConnector(MOROCCO_WEB_AO_SOURCES[0]);
