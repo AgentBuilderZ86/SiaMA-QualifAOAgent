@@ -11,12 +11,21 @@ export type CvScoringItem = {
   adaptations: string[];
 };
 
+export type CvProfileCoverage = {
+  profile: string;
+  icon: string;
+  status: "required" | "missing";
+  statusLabel: string;
+  evidence: string;
+};
+
 export type CvScoringSummary = {
   score: number;
   status: CvScoringStatus;
   statusLabel: string;
   items: CvScoringItem[];
   requiredProfiles: string[];
+  profileCoverage: CvProfileCoverage[];
 };
 
 export type UploadedCvForAdaptation = {
@@ -145,6 +154,39 @@ function scoreStatus(score: number): CvScoringStatus {
   return "missing";
 }
 
+function iconForProfile(profile: string) {
+  const normalized = normalize(profile);
+  if (/(architect|urbanis|si|solution)/.test(normalized)) return "🧭";
+  if (/(chef|directeur|manager|pmo|pilotage|projet)/.test(normalized)) return "📋";
+  if (/(data|donnee|gouvernance|bi|analytics|mdm)/.test(normalized)) return "🧠";
+  if (/(cyber|secur|risque|audit)/.test(normalized)) return "🛡️";
+  if (/(finance|budget|controle|tjm)/.test(normalized)) return "💰";
+  if (/(dev|develop|ingenieur|technique)/.test(normalized)) return "🛠️";
+  return "👤";
+}
+
+function buildProfileCoverage(requiredProfiles: string[]): CvProfileCoverage[] {
+  if (!requiredProfiles.length) {
+    return [
+      {
+        profile: "Profils à confirmer",
+        icon: "⚠️",
+        status: "missing",
+        statusLabel: "Non détecté",
+        evidence: "Aucun profil requis n'a été isolé dans les documents chargés."
+      }
+    ];
+  }
+
+  return requiredProfiles.map((profile) => ({
+    profile,
+    icon: iconForProfile(profile),
+    status: "required",
+    statusLabel: "À couvrir",
+    evidence: "Profil exigé extrait de la fiche qualification / documents AO."
+  }));
+}
+
 function item(params: Omit<CvScoringItem, "status">): CvScoringItem {
   return {
     ...params,
@@ -225,7 +267,8 @@ export function buildCvScoringSummary(ao: AoRecord, qualification?: Qualificatio
     status,
     statusLabel: status === "covered" ? "CV prêts" : status === "attention" ? "Adaptations à finaliser" : "À cadrer",
     items,
-    requiredProfiles
+    requiredProfiles,
+    profileCoverage: buildProfileCoverage(requiredProfiles)
   };
 }
 

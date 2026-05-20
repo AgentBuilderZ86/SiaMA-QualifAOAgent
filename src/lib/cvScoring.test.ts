@@ -51,6 +51,8 @@ describe("cvScoring", () => {
 
     expect(summary.score).toBeGreaterThanOrEqual(50);
     expect(summary.requiredProfiles).toContain("Architecte SI");
+    expect(summary.profileCoverage.map((profile) => profile.profile)).toContain("Architecte SI");
+    expect(summary.profileCoverage.find((profile) => profile.profile === "Architecte SI")?.icon).toBe("🧭");
     expect(summary.items.find((item) => item.id === "similar-references")?.evidence).toContain("références similaires");
     expect(summary.items.find((item) => item.id === "ao-format")?.adaptations.join(" ")).toContain("RC/CPS");
   });
@@ -60,6 +62,7 @@ describe("cvScoring", () => {
 
     expect(summary.status).toBe("missing");
     expect(summary.requiredProfiles).toEqual([]);
+    expect(summary.profileCoverage[0]).toMatchObject({ profile: "Profils à confirmer", icon: "⚠️", status: "missing" });
     expect(summary.items.every((item) => item.evidence.length > 0)).toBe(true);
   });
 

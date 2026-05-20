@@ -98,6 +98,13 @@ export default async function ProposalPage({ params }: { params: Promise<{ aoNum
         <p className="muted t-meta" style={{ marginTop: 12 }}>
           Profils détectés : {cvScoring.requiredProfiles.length ? cvScoring.requiredProfiles.slice(0, 6).join(" · ") : "à confirmer depuis RC/CPS"}
         </p>
+        <div className="source-row" style={{ marginTop: 12 }}>
+          {cvScoring.profileCoverage.map((profile) => (
+            <span className="source-chip" key={profile.profile} title={profile.evidence}>
+              {profile.icon} {profile.profile} · {profile.statusLabel}
+            </span>
+          ))}
+        </div>
       </section>
 
       <section className="grid two-col">
