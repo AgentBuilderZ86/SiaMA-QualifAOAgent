@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AoRecord, QualificationFiche } from "@/lib/aoTypes";
-import { buildCvScoringSummary, parseQualificationForCvScoring } from "@/lib/cvScoring";
+import { buildCvAdaptation, buildCvScoringSummary, parseQualificationForCvScoring } from "@/lib/cvScoring";
 
 function ao(partial: Partial<AoRecord> = {}): AoRecord {
   return {
@@ -67,5 +67,23 @@ describe("cvScoring", () => {
     const parsed = parseQualificationForCvScoring(JSON.stringify(fiche()));
 
     expect(parsed?.profils).toContain("Chef de projet data");
+  });
+
+  it("adapte un CV uploadé sans inventer les exigences non couvertes", () => {
+    const adaptation = buildCvAdaptation(ao(), fiche(), {
+      name: "cv-consultant.txt",
+      targetRole: "Architecte SI",
+      text: [
+        "Architecte SI avec expérience de cadrage data governance.",
+        "Mission client bancaire : cartographie applicative, urbanisation SI et pilotage projet.",
+        "Référence projet : refonte data platform et accompagnement PMO."
+      ].join("\n")
+    });
+
+    expect(adaptation.cvName).toBe("cv-consultant.txt");
+    expect(adaptation.targetRole).toBe("Architecte SI");
+    expect(adaptation.scoreAfter).toBeGreaterThanOrEqual(adaptation.scoreBefore);
+    expect(adaptation.rewrittenBlocks.flatMap((block) => block.bullets).join(" ")).toContain("Architecte SI");
+    expect(adaptation.requirements.some((row) => row.matched)).toBe(true);
   });
 });

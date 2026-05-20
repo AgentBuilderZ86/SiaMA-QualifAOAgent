@@ -9,6 +9,7 @@ import {
   saveProposalSection,
   saveQualification,
   saveSimulation,
+  saveCvAdaptations,
   decideOpportunityReassignment,
   updateOpportunityGovernance,
   transitionAo,
@@ -88,6 +89,16 @@ export async function proposalAction(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath(pathFor(aoNum));
   redirect(pathFor(aoNum));
+}
+
+export async function cvAdaptationAction(formData: FormData) {
+  const actor = await requireUser();
+  const aoNum = String(formData.get("aoNum") || "");
+  await saveCvAdaptations(aoNum, actor, formData);
+  revalidatePath("/dashboard");
+  revalidatePath(pathFor(aoNum));
+  revalidatePath(`${pathFor(aoNum)}/proposal`);
+  redirect(`${pathFor(aoNum)}/proposal`);
 }
 
 export async function pitchAction(formData: FormData) {
