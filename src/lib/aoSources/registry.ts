@@ -1,13 +1,12 @@
 import type { AoSourceConnector } from "@/lib/aoSources/types";
-import { marchesPublicsMarocConnector, privateInstitutionalMarocConnector } from "@/lib/aoSources/publicWeb";
+import { moroccoPublicWebConnectors } from "@/lib/aoSources/publicWeb";
 import { tedConnector } from "@/lib/aoSources/ted";
 import { worldBankConnector } from "@/lib/aoSources/worldBank";
 
 export const aoSourceConnectors: AoSourceConnector[] = [
   tedConnector,
   worldBankConnector,
-  marchesPublicsMarocConnector,
-  privateInstitutionalMarocConnector
+  ...moroccoPublicWebConnectors
 ];
 
 export function activeAoSourceConnectors() {
