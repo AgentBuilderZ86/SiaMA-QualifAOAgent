@@ -2,7 +2,9 @@ import Link from "next/link";
 import type { DashboardData } from "@/lib/aoService";
 import {
   dashboardPathWithFilters,
+  groupRecordsBySource,
   managersMatch,
+  normalizeManagerKey,
   patchPipelineFilters,
   type DashboardPipelineFilters
 } from "./dashboardFilters";
@@ -31,6 +33,7 @@ export function DashboardMobileFilters({
 }) {
   const path = basePathForView(active);
   const c = computeDashboardStatusCounts(data);
+  const sources = groupRecordsBySource(data.records).slice(0, 8);
   const isStatutActive = (st: string) => filters.statuts.length === 1 && filters.statuts[0] === st;
 
   return (
@@ -52,6 +55,18 @@ export function DashboardMobileFilters({
                 href={dashboardPathWithFilters(path, merged)}
               >
                 {label} <span className="count">({n})</span>
+              </Link>
+            );
+          })}
+        </div>
+        <div className="dash-mobile-filters__grp">Sources</div>
+        <div className="dash-mobile-filters__links">
+          {sources.map((source) => {
+            const merged = patchPipelineFilters(filters, { source: source.source, manager: null, client: null, reco: null, delaiMax: null });
+            const on = Boolean(filters.source && normalizeManagerKey(source.source) === normalizeManagerKey(filters.source));
+            return (
+              <Link key={source.source} className={`dash-mobile-filters__link${on ? " on" : ""}`} href={dashboardPathWithFilters(path, merged)}>
+                {source.source} <span className="count">({source.total})</span>
               </Link>
             );
           })}

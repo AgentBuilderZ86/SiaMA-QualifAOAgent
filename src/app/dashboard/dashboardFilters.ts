@@ -1,5 +1,5 @@
 /**
- * Filtres du pipeline (/dashboard…) via query string : statuts, manager, client, reco, délai max.
+ * Filtres du pipeline (/dashboard…) via query string : statuts, source, manager, client, reco, délai max.
  */
 
 import { numericDelaiJours, urgentByDeadline } from "@/lib/aoDeadline";
@@ -19,10 +19,20 @@ export function managersMatch(aoManager: string | undefined, filterManager: stri
   return normalizeManagerKey(aoManager) === normalizeManagerKey(filterManager);
 }
 
+export function sourceLabelForAo(ao: AoRecord): string {
+  return ao.sourceName || ao.sourceTab || ao.sourceKind || "Source inconnue";
+}
+
+export function sourcesMatch(ao: AoRecord, filterSource: string | undefined): boolean {
+  if (!filterSource?.trim()) return true;
+  return normalizeManagerKey(sourceLabelForAo(ao)) === normalizeManagerKey(filterSource);
+}
+
 export type DashboardRecoFilter = "go" | "watch" | "nogo";
 
 export type DashboardPipelineFilters = {
   statuts: string[];
+  source?: string;
   manager?: string;
   client?: string;
   reco?: DashboardRecoFilter;
@@ -32,6 +42,7 @@ export type DashboardPipelineFilters = {
 /** `null` efface la clé correspondante (revenir à la valeur par défaut). */
 export type DashboardPipelineFiltersPatch = {
   statuts?: string[] | null;
+  source?: string | null;
   manager?: string | null;
   client?: string | null;
   reco?: DashboardRecoFilter | null;
@@ -69,17 +80,19 @@ function parsePositiveInt(v: string | undefined): number | undefined {
 
 export function parsePipelineFilters(searchParams: Record<string, string | string[] | undefined>): DashboardPipelineFilters {
   const statuts = parseStatuts(first(searchParams, "statuts"), first(searchParams, "statut"));
+  const source = first(searchParams, "source")?.trim() || undefined;
   const manager = first(searchParams, "manager")?.trim() || undefined;
   const client = first(searchParams, "client")?.trim() || undefined;
   const reco = parseReco(first(searchParams, "reco"));
   const delaiMax = parsePositiveInt(first(searchParams, "delai"));
 
-  return { statuts, manager, client, reco, delaiMax };
+  return { statuts, source, manager, client, reco, delaiMax };
 }
 
 export function serializedPipelineQuery(filters: DashboardPipelineFilters): string {
   const p = new URLSearchParams();
   if (filters.statuts.length) p.set("statuts", filters.statuts.join(","));
+  if (filters.source) p.set("source", filters.source);
   if (filters.manager) p.set("manager", filters.manager);
   if (filters.client) p.set("client", filters.client);
   if (filters.reco) p.set("reco", filters.reco);
@@ -93,6 +106,7 @@ export function serializedPipelineQuery(filters: DashboardPipelineFilters): stri
 export function patchPipelineFilters(current: DashboardPipelineFilters, patch: DashboardPipelineFiltersPatch): DashboardPipelineFilters {
   const next: DashboardPipelineFilters = { ...current };
   if ("statuts" in patch && patch.statuts !== undefined) next.statuts = patch.statuts === null ? [] : patch.statuts;
+  if ("source" in patch) next.source = patch.source === null ? undefined : patch.source;
   if ("manager" in patch) next.manager = patch.manager === null ? undefined : patch.manager;
   if ("client" in patch) next.client = patch.client === null ? undefined : patch.client;
   if ("reco" in patch) next.reco = patch.reco === null ? undefined : patch.reco;
@@ -117,6 +131,7 @@ function matchesReco(ao: AoRecord, reco: DashboardRecoFilter | undefined): boole
 export function filterDashboardRecords(records: AoRecord[], filters: DashboardPipelineFilters): AoRecord[] {
   return records.filter((ao) => {
     if (filters.statuts.length && !filters.statuts.includes(ao.statut)) return false;
+    if (filters.source && !sourcesMatch(ao, filters.source)) return false;
     if (filters.manager && !managersMatch(ao.manager, filters.manager)) return false;
     if (filters.client) {
       const q = filters.client.toLowerCase();
@@ -130,6 +145,22 @@ export function filterDashboardRecords(records: AoRecord[], filters: DashboardPi
     }
     return true;
   });
+}
+
+export function groupRecordsBySource(records: AoRecord[]) {
+  const groups = new Map<string, AoRecord[]>();
+  records.forEach((ao) => {
+    const source = sourceLabelForAo(ao);
+    groups.set(source, [...(groups.get(source) ?? []), ao]);
+  });
+  return [...groups.entries()]
+    .map(([source, aos]) => ({
+      source,
+      total: aos.length,
+      scraped: aos.filter((ao) => ao.sourceKind !== "google-sheet").length,
+      urgent: aos.filter(urgentByDeadline).length
+    }))
+    .sort((a, b) => b.total - a.total || a.source.localeCompare(b.source));
 }
 
 export function sortByDelay(records: AoRecord[]): AoRecord[] {

@@ -4,6 +4,7 @@ function HiddenFields({ filters }: { filters: DashboardPipelineFilters }) {
   return (
     <>
       {filters.statuts.length ? <input type="hidden" name="statuts" value={filters.statuts.join(",")} /> : null}
+      {filters.source ? <input type="hidden" name="source" value={filters.source} /> : null}
       {filters.manager ? <input type="hidden" name="manager" value={filters.manager} /> : null}
       {filters.client ? <input type="hidden" name="client" value={filters.client} /> : null}
       {filters.reco ? <input type="hidden" name="reco" value={filters.reco} /> : null}
