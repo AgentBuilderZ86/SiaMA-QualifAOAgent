@@ -13,12 +13,13 @@ import {
 import { AppShell, PageHeader, Pill, type SideRailGroup } from "@/components/shell";
 import type { AoRecord, QualificationFiche } from "@/lib/aoTypes";
 import { filterOfficeManagerTodoRecords } from "@/lib/officeManagerTodoScope";
+import { openProductionOfferStages } from "@/lib/productionOffer";
 
 export const dynamic = "force-dynamic";
 
 type OfficeTodo = {
   id: string;
-  category: "Réaffectation" | "Affectation" | "Qualification" | "Dossier admin" | "Échéance" | "Finance" | "Clôture";
+  category: "Réaffectation" | "Affectation" | "Qualification" | "Dossier admin" | "Échéance" | "Finance" | "Production offre" | "Clôture";
   label: string;
   helper: string;
   href: string;
@@ -218,6 +219,18 @@ function buildOfficeTodos(ao: AoRecord): OfficeTodo[] {
       helper: "La simulation ou la propale doit être préparée.",
       href: aoHref(ao, "/proposal"),
       priority: 4
+    });
+  }
+  if (["BO", "P2P"].includes(ao.statut)) {
+    openProductionOfferStages(ao).forEach((stage, index) => {
+      todos.push({
+        id: `production-offer-${stage.id}`,
+        category: "Production offre",
+        label: `${stage.title} — ${stage.statusLabel}`,
+        helper: `${stage.subtitle}. ${stage.checks.join(" ")}`,
+        href: aoHref(ao, "/proposal"),
+        priority: 4.2 + index / 100
+      });
     });
   }
   if (["PW", "PL"].includes(ao.statut) && !hasRawValue(ao, "Motif clôture")) {

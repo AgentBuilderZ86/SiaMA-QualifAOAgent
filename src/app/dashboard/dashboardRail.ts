@@ -2,7 +2,9 @@ import type { DashboardData } from "@/lib/aoService";
 import type { SideRailGroup } from "@/components/shell";
 import {
   dashboardPathWithFilters,
+  groupRecordsBySource,
   managersMatch,
+  normalizeManagerKey,
   patchPipelineFilters,
   type DashboardPipelineFilters
 } from "./dashboardFilters";
@@ -73,6 +75,7 @@ export function buildDashboardRail(
   const path = basePathForView(active);
   const statusCounts = computeDashboardStatusCounts(data);
   const countsByStatut = new Map(STATUS_KEYS.map(({ statut }) => [statut, statusCountFor(statut, statusCounts)]));
+  const sourceCounts = groupRecordsBySource(data.records);
 
   const isStatutActive = (st: string) => filters.statuts.length === 1 && filters.statuts[0] === st;
 
@@ -108,6 +111,18 @@ export function buildDashboardRail(
           count: countsByStatut.get(statut) ?? 0,
           href: dashboardPathWithFilters(path, merged),
           active: isStatutActive(statut)
+        };
+      })
+    },
+    {
+      title: "Sources",
+      items: sourceCounts.slice(0, 8).map((s) => {
+        const merged = patchPipelineFilters(filters, { source: s.source, manager: null, client: null, reco: null, delaiMax: null });
+        return {
+          label: s.source,
+          count: s.total,
+          href: dashboardPathWithFilters(path, merged),
+          active: Boolean(filters.source && normalizeManagerKey(s.source) === normalizeManagerKey(filters.source))
         };
       })
     },

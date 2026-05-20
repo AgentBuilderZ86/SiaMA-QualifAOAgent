@@ -8,6 +8,7 @@ import {
   dashboardPathWithFilters,
   filterDashboardRecords,
   groupRecordsByManager,
+  groupRecordsBySource,
   parsePipelineFilters,
   patchPipelineFilters,
   sortByDelay,
@@ -29,7 +30,7 @@ function setEqStatuts(filters: DashboardPipelineFilters, expected: string[]) {
 }
 
 function hasSecondaryFilters(filters: DashboardPipelineFilters) {
-  return Boolean(filters.manager || filters.client || filters.reco || filters.delaiMax !== undefined);
+  return Boolean(filters.source || filters.manager || filters.client || filters.reco || filters.delaiMax !== undefined);
 }
 
 type DashboardAo = Awaited<ReturnType<typeof getDashboardData>>["records"][number];
@@ -156,6 +157,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const filteredPipeline = sortByDelay(scopedRecords).slice(0, 20);
   const scopedUrgent = sortByDelay(scopedRecords.filter(urgentByDeadline)).slice(0, 12);
   const scopedByManager = groupRecordsByManager(scopedRecords).slice(0, 8);
+  const sourceCounts = groupRecordsBySource(data.records);
+  const scopedGoogleSheetRecords = filterDashboardRecords(data.googleSheetRecords, filters);
+  const scopedScrapedRecords = filterDashboardRecords(data.scrapedRecords, filters);
 
   const generatedAt = new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "medium",
@@ -195,6 +199,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const noPipelineFilters = filters.statuts.length === 0 && !hasSecondaryFilters(filters);
   const hasAnyFilter =
     filters.statuts.length > 0 ||
+    Boolean(filters.source) ||
     Boolean(filters.manager) ||
     Boolean(filters.client) ||
     Boolean(filters.reco) ||
@@ -272,7 +277,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <div className="kpi-strip">
             <Link
               className={`kpi${kpiExclusive === "A QUALIFIER" ? " active" : ""}`}
-              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["A QUALIFIER"], manager: null, client: null, reco: null, delaiMax: null }))}
+              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["A QUALIFIER"], source: null, manager: null, client: null, reco: null, delaiMax: null }))}
             >
               <div className="lbl">⏳ A qualifier</div>
               <div className="num">{statusCounts.aq}</div>
@@ -280,7 +285,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Link>
             <Link
               className={`kpi${kpiExclusive === "BO" ? " active" : ""}`}
-              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["BO"], manager: null, client: null, reco: null, delaiMax: null }))}
+              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["BO"], source: null, manager: null, client: null, reco: null, delaiMax: null }))}
             >
               <div className="lbl">🔵 BO</div>
               <div className="num">{statusCounts.bo}</div>
@@ -288,7 +293,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Link>
             <Link
               className={`kpi${kpiExclusive === "P2P" ? " active" : ""}`}
-              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["P2P"], manager: null, client: null, reco: null, delaiMax: null }))}
+              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["P2P"], source: null, manager: null, client: null, reco: null, delaiMax: null }))}
             >
               <div className="lbl">📝 P2P</div>
               <div className="num">{statusCounts.p2p}</div>
@@ -296,7 +301,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Link>
             <Link
               className={`kpi${kpiExclusive === "PS" ? " active" : ""}`}
-              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["PS"], manager: null, client: null, reco: null, delaiMax: null }))}
+              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["PS"], source: null, manager: null, client: null, reco: null, delaiMax: null }))}
             >
               <div className="lbl">📤 PS</div>
               <div className="num">{statusCounts.ps}</div>
@@ -304,7 +309,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Link>
             <Link
               className={`kpi${kpiExclusive === "PITCH" ? " active" : ""}`}
-              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["PITCH"], manager: null, client: null, reco: null, delaiMax: null }))}
+              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["PITCH"], source: null, manager: null, client: null, reco: null, delaiMax: null }))}
             >
               <div className="lbl">🎤 PITCH</div>
               <div className="num">{statusCounts.pitch}</div>
@@ -312,7 +317,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Link>
             <Link
               className={`kpi${kpiExclusive === "PW" ? " active" : ""}`}
-              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["PW"], manager: null, client: null, reco: null, delaiMax: null }))}
+              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["PW"], source: null, manager: null, client: null, reco: null, delaiMax: null }))}
             >
               <div className="lbl">✅ PW</div>
               <div className="num">{statusCounts.pw}</div>
@@ -320,7 +325,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Link>
             <Link
               className={`kpi${kpiExclusive === "PL" ? " active" : ""}`}
-              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["PL"], manager: null, client: null, reco: null, delaiMax: null }))}
+              href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { statuts: ["PL"], source: null, manager: null, client: null, reco: null, delaiMax: null }))}
             >
               <div className="lbl">❌ PL</div>
               <div className="num">{statusCounts.pl}</div>
@@ -337,11 +342,36 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               className={`fchip${isBoP2p ? " on" : ""}`}
               href={dashboardPathWithFilters(
                 "/dashboard",
-                patchPipelineFilters(filters, { statuts: ["BO", "P2P"], manager: null, client: null, reco: null, delaiMax: null })
+                patchPipelineFilters(filters, { statuts: ["BO", "P2P"], source: null, manager: null, client: null, reco: null, delaiMax: null })
               )}
             >
               🔵 BO + P2P
             </Link>
+            <details className="filter-dd">
+              <summary className={`fchip${filters.source ? " on" : ""}`}>＋ Source</summary>
+              <div className="filter-dd-panel" role="menu">
+                <Link
+                  role="menuitem"
+                  className="filter-dd-link"
+                  href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { source: null }))}
+                >
+                  Effacer source
+                </Link>
+                {sourceCounts.map((source) => (
+                  <Link
+                    key={source.source}
+                    role="menuitem"
+                    className="filter-dd-link"
+                    href={dashboardPathWithFilters(
+                      "/dashboard",
+                      patchPipelineFilters(filters, { source: source.source, manager: null, client: null, reco: null, delaiMax: null })
+                    )}
+                  >
+                    {source.source} ({source.total})
+                  </Link>
+                ))}
+              </div>
+            </details>
             <details className="filter-dd">
               <summary className={`fchip${filters.manager ? " on" : ""}`}>＋ Manager</summary>
               <div className="filter-dd-panel" role="menu">
@@ -440,6 +470,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               ) : (
                 <span>tous statuts · </span>
               )}
+              {filters.source ? (
+                <>
+                  {" "}
+                  <Link href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { source: null }))}>source {filters.source} ✕</Link>
+                </>
+              ) : null}
               {filters.manager ? (
                 <>
                   {" "}
@@ -587,16 +623,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
           {/* Source breakdown */}
           <details className="collapsible-panel" style={{ marginTop: 16 }}>
-            <summary>Sources · {data.googleSheetRecords.length} Google Sheets · {data.scrapedRecords.length} scrappés</summary>
+            <summary>Sources · {scopedGoogleSheetRecords.length} Google Sheets · {scopedScrapedRecords.length} scrappés</summary>
             <div style={{ marginTop: 14 }}>
               <p className="t-meta">Source interne prioritaire : si un AO scrappé correspond à cette liste, il est retiré du groupe scrappé.</p>
               <PipelineTable
-                records={data.googleSheetRecords.slice(0, 30)}
+                records={scopedGoogleSheetRecords.slice(0, 30)}
                 emptyLabel="Aucun AO Google Sheets chargé."
               />
               <h3 style={{ marginTop: 16 }}>AO scrappés dédoublonnés</h3>
               <PipelineTable
-                records={data.scrapedRecords.slice(0, 30)}
+                records={scopedScrapedRecords.slice(0, 30)}
                 emptyLabel="Aucun AO scrappé distinct du fichier Google Sheets."
               />
             </div>
@@ -619,7 +655,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   <tbody>
                     {data.sourceReport.map((item) => (
                       <tr key={`${item.sourceName}-${item.collectedAt}`}>
-                        <td>{item.sourceName}</td>
+                        <td>
+                          <Link href={dashboardPathWithFilters("/dashboard", patchPipelineFilters(filters, { source: item.sourceName, manager: null, client: null, reco: null, delaiMax: null }))}>
+                            {item.sourceName}
+                          </Link>
+                        </td>
                         <td className="num">{item.count}</td>
                         <td>
                           {item.collectedAt
