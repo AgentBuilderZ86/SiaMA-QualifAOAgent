@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAoDetail } from "@/lib/ao";
 import { requireUser } from "@/lib/auth";
+import { getSheetsConfigStatus } from "@/lib/google";
 import { AppShell, PageHeader, Pill } from "@/components/shell";
 import { buildAoRail } from "../aoRail";
 import { QualificationForm } from "./QualificationForm";
@@ -25,6 +26,7 @@ export default async function QualificationPage({
   if (!detail) notFound();
   const { ao } = detail;
   const aoHref = encodeURIComponent(ao.aoNum);
+  const sheetsStatus = getSheetsConfigStatus();
 
   return (
     <AppShell user={user} product="AO Agent" rail={buildAoRail(aoHref, "qualification", ao.statut)}>
@@ -48,8 +50,16 @@ export default async function QualificationPage({
 
       <div className="alert" style={{ marginBottom: 16 }}>
         Chargez l’avis, le CPS et le RC pour générer la fiche intelligente. Les champs ci-dessous restent optionnels et
-        permettent de compléter ou corriger l’extraction automatique.
+        permettent de compléter ou corriger l’extraction automatique. OCR open source (Tesseract) activé par défaut pour
+        PDF scannés et images dans les ZIP.
       </div>
+      {!sheetsStatus.configured ? (
+        <div className="alert" role="status" style={{ marginBottom: 16 }}>
+          <strong>Google Sheets non configuré</strong> ({sheetsStatus.missing.join(", ")}) : la fiche sera enregistrée
+          en cache serveur local (temporaire sur Netlify). Ajoutez <code>GOOGLE_SHEET_ID</code> et les identifiants Google
+          pour une persistance durable — ce n’est pas la cause de l’erreur « unexpected response ».
+        </div>
+      ) : null}
       {query.error === "fiche-ia-manquante" ? (
         <div className="alert" role="alert" style={{ marginBottom: 16 }}>
           La fiche HTML n’est pas encore disponible : relancez la qualification intelligente pour générer l’analyse IA.

@@ -8,6 +8,7 @@ import {
   type SheetRow
 } from "@/lib/google";
 import { getSheetsConfigStatus } from "@/lib/google";
+import { readLocalPipelineRow, upsertLocalPipelineRow } from "@/lib/pipelineLocalCache";
 import {
   DEFAULT_REFERENTIELS,
   FEEDBACK_RULE_HEADERS,
@@ -155,6 +156,7 @@ export class GoogleSheetsAoRepository {
   }
 
   async ensureBaseSheets() {
+    if (!getSheetsConfigStatus().configured) return;
     await ensureSheet(tabs.pipeline, PIPELINE_HEADERS);
     await ensureSheet(tabs.history, HIST_HEADERS);
     await ensureSheet(tabs.feedback, FEEDBACK_RULE_HEADERS);
@@ -208,16 +210,26 @@ export class GoogleSheetsAoRepository {
   }
 
   async getPipelineRecord(aoNum: string): Promise<SheetRecord | null> {
+    if (!getSheetsConfigStatus().configured) {
+      const local = await readLocalPipelineRow(aoNum);
+      return local ? { ...local, _rowIndex: "local" } : null;
+    }
     const { records } = await readSheetWithMeta(tabs.pipeline);
     return records.find((row) => String(row["N° AO"]).trim() === String(aoNum).trim()) ?? null;
   }
 
   async upsertPipeline(ao: AoRecord, status: AoStatus, updates: SheetRow = {}) {
-    const headers = await ensureSheet(tabs.pipeline, PIPELINE_HEADERS);
     const existing = await this.getPipelineRecord(ao.aoNum);
     const row = rowForPipeline(ao, status, { ...existing, ...updates });
-    if (existing?._rowIndex) {
+    if (!getSheetsConfigStatus().configured) {
+      await upsertLocalPipelineRow(ao.aoNum, row);
+      return;
+    }
+    const headers = await ensureSheet(tabs.pipeline, PIPELINE_HEADERS);
+    if (existing?._rowIndex && existing._rowIndex !== "local") {
       await updateRow(tabs.pipeline, Number(existing._rowIndex), headers, row);
+    } else if (existing?._rowIndex === "local") {
+      await appendRow(tabs.pipeline, headers, row);
     } else {
       await appendRow(tabs.pipeline, headers, row);
     }
@@ -236,6 +248,7 @@ export class GoogleSheetsAoRepository {
   }
 
   async appendHistory(event: PipelineEvent) {
+    if (!getSheetsConfigStatus().configured) return;
     await appendRow(tabs.history, HIST_HEADERS, {
       Timestamp: event.timestamp,
       "N° AO": event.aoNum,

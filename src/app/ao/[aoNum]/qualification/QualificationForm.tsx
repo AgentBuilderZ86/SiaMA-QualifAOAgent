@@ -52,7 +52,7 @@ export function QualificationForm({ aoNum, hasSourceUrl }: { aoNum: string; hasS
         ) : (
           <>
             <strong>Dossier documentaire AO</strong>
-            <span>Déposez au minimum l’avis, le CPS et le RC. Les PDF scannés déclenchent le fallback OCR configuré.</span>
+            <span>Déposez l’avis, le CPS et le RC, ou un ZIP complet. PDF scannés et images : OCR Tesseract automatique (sans configuration).</span>
           </>
         )}
       </div>

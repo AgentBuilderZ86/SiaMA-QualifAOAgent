@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { ocrPdfBuffer } from "@/lib/ocr/pdfRasterOcr";
+import { recognizeImageBuffer } from "@/lib/ocr/tesseractOcr";
 import type { QualificationDocumentExtraction, QualificationDocumentKind } from "@/lib/aoTypes";
 
 export type ExtractedDocument = {
@@ -211,10 +213,17 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp", "gif"];
+
+function isImageFile(ext: string, contentType = "") {
+  const type = contentType.toLowerCase();
+  return IMAGE_EXTENSIONS.includes(ext) || type.startsWith("image/");
+}
+
 function supportsOcr(name: string, contentType = "") {
   const ext = name.split(".").pop()?.toLowerCase() || "";
   const type = contentType.toLowerCase();
-  return ["pdf", "png", "jpg", "jpeg", "tif", "tiff", "bmp"].includes(ext) || type.includes("pdf") || type.startsWith("image/");
+  return ext === "pdf" || type.includes("pdf") || isImageFile(ext, contentType);
 }
 
 function azureOcrConfig() {
@@ -273,17 +282,26 @@ async function extractWithAzureDocumentIntelligence(buffer: Buffer, contentType:
 }
 
 async function runOcrFallback(buffer: Buffer, name: string, contentType: string) {
-  const provider = (process.env.OCR_PROVIDER || process.env.AO_OCR_PROVIDER || "").trim().toLowerCase();
   if (!supportsOcr(name, contentType)) {
     return { text: "", warning: "OCR non applicable à ce format." };
   }
+
+  const provider = (process.env.OCR_PROVIDER || process.env.AO_OCR_PROVIDER || "tesseract").trim().toLowerCase();
+  if (provider === "none") {
+    return { text: "", warning: "OCR désactivé (OCR_PROVIDER=none)." };
+  }
+
   if (provider === "azure" || provider === "azure-document-intelligence") {
-    return extractWithAzureDocumentIntelligence(buffer, contentType);
+    const azure = await extractWithAzureDocumentIntelligence(buffer, contentType);
+    if (azure.text.trim()) return azure;
   }
-  if (!provider || provider === "none") {
-    return { text: "", warning: "OCR requis pour ce document, mais aucun provider OCR n'est configuré." };
+
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  const type = contentType.toLowerCase();
+  if (ext === "pdf" || type.includes("pdf")) {
+    return ocrPdfBuffer(buffer);
   }
-  return { text: "", warning: `Provider OCR non supporté : ${provider}.` };
+  return recognizeImageBuffer(buffer, name);
 }
 
 async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<ExtractedDocument> {
@@ -305,10 +323,12 @@ async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<Extr
     .filter((n) => !zip.files[n].dir)
     .sort();
 
+  const zipSupportedExtensions = ["pdf", "docx", "txt", ...IMAGE_EXTENSIONS];
+
   const supported = names.filter((path) => {
     const base = path.split("/").pop() || path;
     const ext = base.split(".").pop()?.toLowerCase() || "";
-    return ["pdf", "docx", "txt"].includes(ext);
+    return zipSupportedExtensions.includes(ext);
   });
   if (supported.length > MAX_ZIP_ENTRIES) {
     warnings.push(`Archive : seuls les ${MAX_ZIP_ENTRIES} premiers fichiers PDF/DOCX/TXT sont traités.`);
@@ -320,7 +340,7 @@ async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<Extr
     const base = path.split("/").pop() || path;
     const ext = base.split(".").pop()?.toLowerCase() || "";
 
-    if (!["pdf", "docx", "txt"].includes(ext)) continue;
+    if (!zipSupportedExtensions.includes(ext)) continue;
     if (processed >= MAX_ZIP_ENTRIES) break;
     processed += 1;
 
@@ -354,12 +374,16 @@ async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<Extr
         warnings.push(`DOCX ${path} : ${error instanceof Error ? error.message : "erreur"}`);
         continue;
       }
-    } else if (ext === "pdf") {
-      const r = await extractPdfBuffer(buf);
+    } else if (ext === "pdf" || isImageFile(ext)) {
+      const r = await extractDocumentBufferWithOcr({
+        name: base,
+        buffer: buf,
+        contentType: ext === "pdf" ? "application/pdf" : `image/${ext === "jpg" ? "jpeg" : ext}`
+      });
       chunk = r.text;
       if (r.warning) localWarning = `${base}: ${r.warning}`;
-      if (!chunk.trim() && r.warning.includes("Erreur extraction")) {
-        warnings.push(r.warning);
+      if (!chunk.trim() && r.extractionMode === "unreadable") {
+        warnings.push(r.warning || `Lecture impossible : ${path}`);
         continue;
       }
     }
@@ -381,7 +405,7 @@ async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<Extr
     return {
       name: outerName,
       text: "",
-      warning: warning || "ZIP sans fichier .pdf / .docx / .txt exploitable."
+      warning: warning || "ZIP sans fichier .pdf / .docx / .txt / image exploitable."
     };
   }
   return { name: outerName, text, warning };
@@ -419,6 +443,10 @@ export async function extractDocumentBuffer({ name, buffer, contentType = "" }: 
     };
   }
 
+  if (isImageFile(ext, normalizedType)) {
+    return { name, text: "", warning: "" };
+  }
+
   if (ext === "docx" || normalizedType.includes("wordprocessingml.document")) {
     try {
       const mammoth = await import("mammoth");
@@ -440,7 +468,7 @@ export async function extractDocumentBuffer({ name, buffer, contentType = "" }: 
   return {
     name,
     text: "",
-    warning: `Extraction automatique non disponible pour .${ext || "inconnu"}. Formats pris en charge : .txt, .docx, .pdf, .zip (PDF/DOCX/TXT).`
+    warning: `Extraction automatique non disponible pour .${ext || "inconnu"}. Formats pris en charge : .txt, .docx, .pdf, images, .zip (PDF/DOCX/TXT/images).`
   };
 }
 

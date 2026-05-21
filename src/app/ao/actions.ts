@@ -73,7 +73,13 @@ export async function qualificationAction(_prevState: QualificationActionState, 
     revalidatePath(pathFor(aoNum));
     return { error: "", ok: true };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Erreur inconnue pendant la génération de la fiche." };
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+          ? e
+          : "Erreur inconnue pendant la génération de la fiche.";
+    return { error: message };
   }
 }
 

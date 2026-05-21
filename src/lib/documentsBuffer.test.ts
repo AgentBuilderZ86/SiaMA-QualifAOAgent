@@ -68,6 +68,6 @@ describe("extractDocumentBuffer", () => {
 
     expect(extracted.kind).toBe("Avis");
     expect(extracted.extractionMode).toBe("unreadable");
-    expect(extracted.warning).toContain("OCR requis");
+    expect(extracted.warning).toMatch(/OCR désactivé|OCR requis|OCR Tesseract|OCR PDF/);
   });
 });
