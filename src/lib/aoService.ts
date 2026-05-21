@@ -11,7 +11,7 @@ import {
   type AtelierCommitPayload
 } from "@/lib/atelierStrategie";
 import { buildAtelierSystemPrompt, buildAtelierUserPayload } from "@/lib/atelierPrompt";
-import { extractDocumentSections, extractUploadedDocument, summarizeDocumentText } from "@/lib/documents";
+import { extractDocumentSections, extractUploadedDocument, extractUploadedDocuments, summarizeDocumentText } from "@/lib/documents";
 import { buildCvAdaptation, parseQualificationForCvScoring, type CvAdaptationResult, type UploadedCvForAdaptation } from "@/lib/cvScoring";
 import { extractKeyMetadata, isPlaceholderSection } from "@/lib/qualification/documentMetadata";
 import { filenameSignalsPrefix, parseFilenameSignals } from "@/lib/qualification/filenameSignals";
@@ -20,10 +20,20 @@ import { generateProposalSection, generateQualificationRecommendation } from "@/
 import { completeChat, hasConfiguredLlm } from "@/lib/llmChat";
 import { getSheetsConfigStatus } from "@/lib/google";
 import { readAoCache } from "@/lib/aoSources/cache";
+import { readAoDocumentCache } from "@/lib/aoSources/documentCache";
 import { generateIntelligentQualification } from "@/lib/qualification/intelligence";
 import { operationalDeadlineSubset, urgentByDeadline } from "@/lib/aoDeadline";
 import type { SheetRow } from "@/lib/google";
-import { AO_STATUSES, type AoRecord, type AoStatus, type ClosureReport, type FinancialSimulation, type QualificationFiche } from "@/lib/aoTypes";
+import {
+  AO_STATUSES,
+  type AoRecord,
+  type AoStatus,
+  type ClosureReport,
+  type FinancialSimulation,
+  type QualificationDocumentExtraction,
+  type QualificationDocumentKind,
+  type QualificationFiche
+} from "@/lib/aoTypes";
 import {
   buildManagerFeedbackDecision,
   isDifferentManager,
@@ -166,6 +176,81 @@ function requiredJustification(value: string) {
   return text;
 }
 
+function parseQualificationFiche(value: unknown): QualificationFiche | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    return JSON.parse(value) as QualificationFiche;
+  } catch {
+    return null;
+  }
+}
+
+function legacyDocumentFromFiche(fiche: QualificationFiche | null): QualificationDocumentExtraction[] {
+  if (!fiche?.documentExtract || fiche.documentExtract === "Non trouvé dans le document.") return [];
+  return [
+    {
+      kind: "Autre",
+      name: fiche.documentName || "Document de qualification existant",
+      text: fiche.documentExtract,
+      warning: fiche.extractionStatus === "Document analysé" ? "" : fiche.extractionStatus || "",
+      extractionMode: "native",
+      extractedAt: new Date().toISOString()
+    }
+  ];
+}
+
+function normalizeDocumentKind(kind: string): QualificationDocumentKind {
+  if (kind === "Avis" || kind === "CPS" || kind === "RC") return kind;
+  return "Autre";
+}
+
+async function cachedQualificationDocuments(ao: AoRecord): Promise<QualificationDocumentExtraction[]> {
+  const cache = await readAoDocumentCache();
+  return cache.documents
+    .filter((document) => document.aoNum === ao.aoNum)
+    .slice(0, 6)
+    .map((document) => ({
+      kind: normalizeDocumentKind(document.kind),
+      name: document.filename || document.label,
+      text: document.text,
+      warning: document.warning,
+      extractionMode: "cache",
+      sha256: document.sha256,
+      sourceUrl: document.documentUrl,
+      extractedAt: document.extractedAt
+    }));
+}
+
+function documentSeparator(document: Pick<QualificationDocumentExtraction, "kind" | "name" | "sourceUrl">) {
+  const source = document.sourceUrl ? ` · ${document.sourceUrl}` : "";
+  return `--- Document ${document.kind} : ${document.name}${source} ---`;
+}
+
+function joinQualificationDocuments(documents: QualificationDocumentExtraction[], manualExtract: string) {
+  const parts = documents
+    .filter((document) => document.text.trim())
+    .map((document) => `${documentSeparator(document)}\n${document.text.trim()}`);
+  if (manualExtract.trim()) {
+    parts.push(`--- Extrait manuel utilisateur ---\n${manualExtract.trim()}`);
+  }
+  return parts.join("\n\n");
+}
+
+function documentExtractionStatus(documents: QualificationDocumentExtraction[], manualExtract: string) {
+  if (!documents.length && !manualExtract.trim()) return "Aucun document transmis.";
+  const warnings = documents.map((document) => document.warning).filter(Boolean);
+  const unreadable = documents.filter((document) => document.extractionMode === "unreadable").map((document) => document.name);
+  const ocr = documents.filter((document) => document.ocrUsed).map((document) => document.name);
+  return [
+    documents.length ? `${documents.length} document(s) analysé(s).` : "",
+    ocr.length ? `OCR utilisé : ${ocr.join(", ")}.` : "",
+    unreadable.length ? `Document(s) illisible(s) : ${unreadable.join(", ")}.` : "",
+    ...warnings
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 async function appendGovernanceFeedback(params: {
   ao: AoRecord;
   actor: string;
@@ -291,10 +376,25 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
   const ao = await aoRepository.findAo(aoNum);
   if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
 
-  const uploaded = await extractUploadedDocument(formData.get("document") as File | null);
-  const filenameSignals = parseFilenameSignals(uploaded.name || "");
+  const existingFiche = parseQualificationFiche(ao.raw?.["Fiche qualification"]);
   const manualExtract = String(formData.get("documentExtract") || "");
-  const prefixedDocText = filenameSignalsPrefix(filenameSignals) + uploaded.text;
+  const includeSourceDocuments = formData.get("includeSourceDocuments") === "yes";
+  const forceDocumentExtraction = formData.get("forceDocumentExtraction") === "yes";
+  const uploadedDocuments = await extractUploadedDocuments(formData);
+  const cacheDocuments = includeSourceDocuments ? await cachedQualificationDocuments(ao) : [];
+  const freshDocuments = [...uploadedDocuments, ...cacheDocuments];
+  const previousDocuments = existingFiche?.documents?.length ? existingFiche.documents : legacyDocumentFromFiche(existingFiche);
+  const documents = freshDocuments.length || forceDocumentExtraction ? freshDocuments : previousDocuments;
+  const documentName = documents.map((document) => document.name).filter(Boolean).join(", ");
+  const filenameSignals = documents.reduce(
+    (acc, document) => ({ ...acc, ...parseFilenameSignals(document.name || "") }),
+    parseFilenameSignals(documentName || "")
+  );
+  const documentCorpus = joinQualificationDocuments(documents, manualExtract);
+  if (!documentCorpus.trim() && !existingFiche?.documentExtract) {
+    throw new Error("Ajoutez au moins un document AO (Avis, CPS, RC), importez les pièces source ou collez un extrait manuel.");
+  }
+  const prefixedDocText = filenameSignalsPrefix(filenameSignals) + (documentCorpus || existingFiche?.documentExtract || "");
   const documentExtract = summarizeDocumentText(prefixedDocText, manualExtract);
   const sectionsRaw = extractDocumentSections(documentExtract);
   const meta = extractKeyMetadata(documentExtract);
@@ -338,7 +438,7 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
       : undefined;
 
   const pipelineNotes = (() => {
-    const base = uploaded.warning || "";
+    const base = documentExtractionStatus(documents, manualExtract);
     const hint = meta.matchNotes[0];
     if (hint && base.length < 350) return [base, hint].filter(Boolean).join(" · ");
     return base;
@@ -358,11 +458,16 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
     chances: fromForm("chances", ""),
     risques: fromForm("risques", sections.risques),
     pointsVigilance: sections.pointsVigilance,
-    documentName: uploaded.name,
+    documentName: documentName || existingFiche?.documentName || "",
     documentExtract,
-    extractionStatus: uploaded.warning || "Document analysé",
+    extractionStatus: pipelineNotes || "Document analysé",
+    documents: documents.length ? documents : previousDocuments,
     recommendation: "À générer",
-    sources: ["Google Sheets AO", uploaded.name || "Saisie qualification"].filter(Boolean),
+    sources: [
+      "Google Sheets AO",
+      ...documents.map((document) => document.name || document.sourceUrl || ""),
+      manualExtract.trim() ? "Saisie qualification" : ""
+    ].filter(Boolean),
     filenameSignals: Object.keys(filenameSignals).length ? filenameSignals : undefined,
     extractionEvidence
   };

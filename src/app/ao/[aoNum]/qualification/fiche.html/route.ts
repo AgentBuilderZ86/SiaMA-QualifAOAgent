@@ -11,7 +11,7 @@ function fileName(value: string) {
   return value.replace(/[^\w.-]+/g, "_").slice(0, 80) || "qualification";
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ aoNum: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ aoNum: string }> }) {
   await requireUser();
   const { aoNum } = await params;
   const detail = await getAoDetail(decodeURIComponent(aoNum));
@@ -21,7 +21,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ aoN
   const qualification = parseJsonField(detail.pipeline?.["Fiche qualification"]) as Partial<QualificationFiche> | null;
   const intelligence = qualification?.intelligence;
   if (!qualification || !intelligence) {
-    return new NextResponse("Fiche qualification IA introuvable. Lancer la qualification intelligente d'abord.", { status: 404 });
+    const url = new URL(request.url);
+    url.pathname = `/ao/${encodeURIComponent(decodeURIComponent(aoNum))}/qualification`;
+    url.searchParams.set("error", "fiche-ia-manquante");
+    return NextResponse.redirect(url);
   }
   const html = buildQualificationFicheHtml(detail.ao, intelligence);
   return new NextResponse(html, {

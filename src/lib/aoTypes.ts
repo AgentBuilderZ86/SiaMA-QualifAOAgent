@@ -71,6 +71,20 @@ export type QualificationExtractionEvidence = {
   maitreOuvrageRegex?: string;
 };
 
+export type QualificationDocumentKind = "Avis" | "CPS" | "RC" | "Autre";
+
+export type QualificationDocumentExtraction = {
+  kind: QualificationDocumentKind;
+  name: string;
+  text: string;
+  warning: string;
+  extractionMode: "native" | "ocr" | "manual" | "cache" | "unreadable";
+  ocrUsed?: boolean;
+  sha256?: string;
+  sourceUrl?: string;
+  extractedAt: string;
+};
+
 export type QualificationFiche = {
   contexte: string;
   objet: string;
@@ -88,6 +102,7 @@ export type QualificationFiche = {
   documentName: string;
   documentExtract: string;
   extractionStatus: string;
+  documents?: QualificationDocumentExtraction[];
   recommendation: string;
   sources: string[];
   intelligence?: IntelligentQualificationFiche;

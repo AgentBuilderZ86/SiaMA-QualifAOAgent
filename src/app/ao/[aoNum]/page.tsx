@@ -10,6 +10,7 @@ import { WorkflowFlow } from "./workflow";
 import { AppShell, PageHeader, Pill } from "@/components/shell";
 import { delayLabel } from "@/lib/aoDeadline";
 import { buildAoRail } from "./aoRail";
+import type { QualificationDocumentExtraction, QualificationFiche } from "@/lib/aoTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,24 @@ function delayClass(jours: number | null | undefined): string {
   return "";
 }
 
+function QualificationDocumentsPanel({ documents }: { documents: QualificationDocumentExtraction[] }) {
+  if (!documents.length) return null;
+  return (
+    <div className="qualification-documents">
+      {documents.map((document) => (
+        <div className="qualification-document-card" key={`${document.kind}-${document.name}-${document.sha256 || ""}`}>
+          <span>{document.kind}</span>
+          <strong>{document.name}</strong>
+          <small>
+            {document.extractionMode === "ocr" ? "OCR" : document.extractionMode === "cache" ? "Source AO" : "Extraction native"}
+            {document.warning ? ` · ${document.warning}` : ""}
+          </small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default async function AoDetailPage({ params }: { params: Promise<{ aoNum: string }> }) {
   const user = await requireUser();
   const { aoNum } = await params;
@@ -39,7 +58,7 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
   const { ao, pipeline } = detail;
   const aoHref = encodeURIComponent(ao.aoNum);
   const workflowAvailable = Boolean(process.env.GOOGLE_SHEET_ID);
-  const qualification = parseJsonField(pipeline?.["Fiche qualification"]);
+  const qualification = parseJsonField(pipeline?.["Fiche qualification"]) as Partial<QualificationFiche> | null;
   const simulation = parseJsonField(pipeline?.["Simulation financière"]);
   const proposal = parseJsonField(pipeline?.["Sections propale"]);
 
@@ -175,6 +194,8 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
                 ))}
               </div>
             ) : null}
+
+            <QualificationDocumentsPanel documents={qualification.documents || []} />
 
             <details className="extract-panel">
               <summary>Voir l'extrait documentaire analysé</summary>

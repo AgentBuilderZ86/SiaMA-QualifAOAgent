@@ -18,8 +18,11 @@ export function isQualificationDocumentLoaded(fiche: QualificationFiche | null) 
 }
 
 export function detectedLoadedFiles(fiche: QualificationFiche | null) {
+  if (fiche?.documents?.length) {
+    return [...new Set(fiche.documents.map((document) => document.name).filter(Boolean))].slice(0, 8);
+  }
   if (!fiche?.documentExtract) return [];
-  const files = [...fiche.documentExtract.matchAll(/--- Fichier ZIP :\s*([^-]+?)\s*---/g)]
+  const files = [...fiche.documentExtract.matchAll(/--- (?:Fichier ZIP|Document [^:]+) :\s*([^-]+?)\s*---/g)]
     .map((match) => match[1]?.trim())
     .filter(Boolean);
   if (files.length) return [...new Set(files)].slice(0, 6);

@@ -1,7 +1,15 @@
+import crypto from "node:crypto";
+import type { QualificationDocumentExtraction, QualificationDocumentKind } from "@/lib/aoTypes";
+
 export type ExtractedDocument = {
   name: string;
   text: string;
   warning: string;
+  kind?: QualificationDocumentKind;
+  extractionMode?: QualificationDocumentExtraction["extractionMode"];
+  ocrUsed?: boolean;
+  sha256?: string;
+  sourceUrl?: string;
 };
 
 export type DocumentSections = {
@@ -21,6 +29,8 @@ type DocumentBufferInput = {
   name: string;
   buffer: Buffer;
   contentType?: string;
+  kind?: QualificationDocumentKind;
+  sourceUrl?: string;
 };
 
 /** Limite globale de caractères conservée pour scoring / LLM (évite OOM serverless). */
@@ -31,6 +41,9 @@ const MAX_ZIP_ENTRY_CHARS = 25000;
 const MAX_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024;
 /** Taille max d’un PDF brut avant extraction. */
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
+const MIN_TEXT_CHARS_BEFORE_OCR = 180;
+const OCR_POLL_INTERVAL_MS = 1_000;
+const OCR_MAX_POLLS = 30;
 
 function cleanText(value: string) {
   return value
@@ -184,6 +197,85 @@ async function extractPdfBuffer(buffer: Buffer): Promise<{ text: string; warning
   }
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function supportsOcr(name: string, contentType = "") {
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  const type = contentType.toLowerCase();
+  return ["pdf", "png", "jpg", "jpeg", "tif", "tiff", "bmp"].includes(ext) || type.includes("pdf") || type.startsWith("image/");
+}
+
+function azureOcrConfig() {
+  const endpoint = process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT?.trim().replace(/\/+$/, "");
+  const key = process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY?.trim();
+  const model = process.env.AZURE_DOCUMENT_INTELLIGENCE_MODEL?.trim() || "prebuilt-read";
+  const apiVersion = process.env.AZURE_DOCUMENT_INTELLIGENCE_API_VERSION?.trim() || "2024-11-30";
+  return endpoint && key ? { endpoint, key, model, apiVersion } : null;
+}
+
+async function extractWithAzureDocumentIntelligence(buffer: Buffer, contentType: string) {
+  const config = azureOcrConfig();
+  if (!config) {
+    return { text: "", warning: "OCR requis, mais Azure Document Intelligence n'est pas configuré." };
+  }
+
+  const analyzeUrl = `${config.endpoint}/documentintelligence/documentModels/${encodeURIComponent(
+    config.model
+  )}:analyze?api-version=${encodeURIComponent(config.apiVersion)}`;
+  const analyzeResponse = await fetch(analyzeUrl, {
+    method: "POST",
+    headers: {
+      "Ocp-Apim-Subscription-Key": config.key,
+      "Content-Type": contentType || "application/pdf"
+    },
+    body: new Uint8Array(buffer)
+  });
+
+  if (!analyzeResponse.ok) {
+    return { text: "", warning: `OCR Azure refusé : HTTP ${analyzeResponse.status}.` };
+  }
+
+  const operationLocation = analyzeResponse.headers.get("operation-location");
+  if (!operationLocation) {
+    return { text: "", warning: "OCR Azure sans URL de résultat." };
+  }
+
+  for (let attempt = 0; attempt < OCR_MAX_POLLS; attempt += 1) {
+    await sleep(OCR_POLL_INTERVAL_MS);
+    const resultResponse = await fetch(operationLocation, {
+      headers: { "Ocp-Apim-Subscription-Key": config.key }
+    });
+    if (!resultResponse.ok) {
+      return { text: "", warning: `Résultat OCR Azure indisponible : HTTP ${resultResponse.status}.` };
+    }
+    const payload = (await resultResponse.json()) as { status?: string; analyzeResult?: { content?: string }; error?: { message?: string } };
+    if (payload.status === "succeeded") {
+      return { text: cleanText(payload.analyzeResult?.content || ""), warning: "" };
+    }
+    if (payload.status === "failed") {
+      return { text: "", warning: `OCR Azure échoué : ${payload.error?.message || "erreur inconnue"}.` };
+    }
+  }
+
+  return { text: "", warning: "OCR Azure expiré avant résultat." };
+}
+
+async function runOcrFallback(buffer: Buffer, name: string, contentType: string) {
+  const provider = (process.env.OCR_PROVIDER || process.env.AO_OCR_PROVIDER || "").trim().toLowerCase();
+  if (!supportsOcr(name, contentType)) {
+    return { text: "", warning: "OCR non applicable à ce format." };
+  }
+  if (provider === "azure" || provider === "azure-document-intelligence") {
+    return extractWithAzureDocumentIntelligence(buffer, contentType);
+  }
+  if (!provider || provider === "none") {
+    return { text: "", warning: "OCR requis pour ce document, mais aucun provider OCR n'est configuré." };
+  }
+  return { text: "", warning: `Provider OCR non supporté : ${provider}.` };
+}
+
 async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<ExtractedDocument> {
   if (buffer.length > MAX_ZIP_UPLOAD_BYTES) {
     return {
@@ -330,14 +422,85 @@ export async function extractDocumentBuffer({ name, buffer, contentType = "" }: 
   };
 }
 
-export async function extractUploadedDocument(file: File | null): Promise<ExtractedDocument> {
+export async function extractDocumentBufferWithOcr({
+  name,
+  buffer,
+  contentType = "",
+  kind = "Autre",
+  sourceUrl
+}: DocumentBufferInput): Promise<ExtractedDocument> {
+  const native = await extractDocumentBuffer({ name, buffer, contentType, kind, sourceUrl });
+  const base = {
+    ...native,
+    kind,
+    sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
+    sourceUrl,
+    extractionMode: native.text.trim() ? ("native" as const) : ("unreadable" as const),
+    ocrUsed: false
+  };
+  if (native.text.trim().length >= MIN_TEXT_CHARS_BEFORE_OCR || !supportsOcr(name, contentType)) return base;
+
+  const ocr = await runOcrFallback(buffer, name, contentType);
+  if (ocr.text.trim()) {
+    return {
+      ...base,
+      text: ocr.text.slice(0, MAX_EXTRACT_CHARS),
+      warning: [native.warning, ocr.warning].filter(Boolean).join(" "),
+      extractionMode: "ocr",
+      ocrUsed: true
+    };
+  }
+  return {
+    ...base,
+    warning: [native.warning, ocr.warning].filter(Boolean).join(" ") || "Document peu lisible, OCR sans résultat.",
+    extractionMode: native.text.trim() ? "native" : "unreadable"
+  };
+}
+
+export async function extractUploadedDocument(file: File | null, kind: QualificationDocumentKind = "Autre"): Promise<ExtractedDocument> {
   if (!file || file.size === 0) {
-    return { name: "", text: "", warning: "Aucun document transmis." };
+    return { name: "", text: "", warning: "Aucun document transmis.", kind, extractionMode: "unreadable" };
   }
 
   const name = file.name;
   const buffer = Buffer.from(await file.arrayBuffer());
-  return extractDocumentBuffer({ name, buffer, contentType: file.type });
+  return extractDocumentBufferWithOcr({ name, buffer, contentType: file.type, kind });
+}
+
+function isUploadedFile(value: FormDataEntryValue): value is File {
+  return value instanceof File && value.size > 0;
+}
+
+const DOCUMENT_UPLOAD_FIELDS: Array<{ field: string; kind: QualificationDocumentKind }> = [
+  { field: "documentAvis", kind: "Avis" },
+  { field: "documentCps", kind: "CPS" },
+  { field: "documentRc", kind: "RC" },
+  { field: "documentAutres", kind: "Autre" },
+  { field: "document", kind: "Autre" }
+];
+
+export async function extractUploadedDocuments(formData: FormData): Promise<QualificationDocumentExtraction[]> {
+  const files = DOCUMENT_UPLOAD_FIELDS.flatMap(({ field, kind }) =>
+    formData
+      .getAll(field)
+      .filter(isUploadedFile)
+      .map((file) => ({ file, kind }))
+  );
+
+  const extracted = await Promise.all(files.map(({ file, kind }) => extractUploadedDocument(file, kind)));
+  return extracted
+    .filter((doc) => doc.name || doc.text.trim())
+    .map((doc) => ({
+      kind: doc.kind || "Autre",
+      name: doc.name,
+      text: doc.text,
+      warning: doc.warning,
+      extractionMode: doc.extractionMode || (doc.text.trim() ? "native" : "unreadable"),
+      ocrUsed: doc.ocrUsed,
+      sha256: doc.sha256,
+      sourceUrl: doc.sourceUrl,
+      extractedAt: new Date().toISOString()
+    }));
 }
 
 export function summarizeDocumentText(text: string, fallback: string) {
