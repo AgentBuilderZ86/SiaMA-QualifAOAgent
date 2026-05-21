@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { qualificationAction, type QualificationActionState } from "../../actions";
 
 const questions = [
@@ -23,7 +24,14 @@ const documentFields = [
 const initialState: QualificationActionState = { error: "" };
 
 export function QualificationForm({ aoNum, hasSourceUrl }: { aoNum: string; hasSourceUrl: boolean }) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState(qualificationAction, initialState);
+
+  useEffect(() => {
+    if (state.ok) {
+      router.replace(`/ao/${encodeURIComponent(aoNum)}`);
+    }
+  }, [state.ok, aoNum, router]);
 
   return (
     <form action={formAction} className="card section form-grid qualification-form">
@@ -44,7 +52,7 @@ export function QualificationForm({ aoNum, hasSourceUrl }: { aoNum: string; hasS
         ) : (
           <>
             <strong>Dossier documentaire AO</strong>
-            <span>Déposez au minimum l’avis, le CPS et le RC. Les PDF scannés déclenchent le fallback OCR configuré.</span>
+            <span>Déposez l’avis, le CPS et le RC, ou un ZIP complet. PDF scannés et images : OCR Tesseract automatique (sans configuration).</span>
           </>
         )}
       </div>
@@ -67,7 +75,7 @@ export function QualificationForm({ aoNum, hasSourceUrl }: { aoNum: string; hasS
               accept=".pdf,.doc,.docx,.txt,.zip,.png,.jpg,.jpeg,.tif,.tiff"
               multiple
             />
-            <span className="muted t-meta">BPU, acte d’engagement, annexes, zip complet.</span>
+            <span className="muted t-meta">BPU, acte d’engagement, annexes, zip complet (max 25 Mo).</span>
           </div>
         </div>
 

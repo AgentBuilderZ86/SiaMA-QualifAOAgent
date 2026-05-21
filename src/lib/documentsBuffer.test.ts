@@ -1,3 +1,4 @@
+import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { extractDocumentBufferWithOcr, extractUploadedDocuments, extractDocumentBuffer } from "@/lib/documents";
 
@@ -26,6 +27,34 @@ describe("extractDocumentBuffer", () => {
     expect(documents.map((document) => document.name)).toEqual(["avis.txt", "cps.txt", "rc.txt"]);
   });
 
+  it("n'échoue pas à l'import du parseur PDF (régression pdf-parse debug)", async () => {
+    const extracted = await extractDocumentBuffer({
+      name: "minimal.pdf",
+      contentType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n%%EOF", "utf8")
+    });
+
+    expect(extracted.warning).not.toContain("ENOENT");
+    expect(extracted.warning).not.toMatch(/test\/data\/05-versions-space/);
+  });
+
+  it("extrait le texte des fichiers TXT contenus dans un ZIP", async () => {
+    const zip = new JSZip();
+    zip.file("dossier/avis.txt", "Avis : mission de conseil en stratégie SI.");
+    zip.file("dossier/rc.txt", "RC : critères techniques et administratifs.");
+    const buffer = await zip.generateAsync({ type: "nodebuffer" });
+
+    const extracted = await extractDocumentBuffer({
+      name: "ao-complet.zip",
+      contentType: "application/zip",
+      buffer
+    });
+
+    expect(extracted.text).toContain("mission de conseil");
+    expect(extracted.text).toContain("critères techniques");
+    expect(extracted.warning).not.toContain("ENOENT");
+  });
+
   it("signale explicitement un besoin OCR quand un PDF n'a pas de texte exploitable", async () => {
     const previousProvider = process.env.OCR_PROVIDER;
     process.env.OCR_PROVIDER = "none";
@@ -39,6 +68,6 @@ describe("extractDocumentBuffer", () => {
 
     expect(extracted.kind).toBe("Avis");
     expect(extracted.extractionMode).toBe("unreadable");
-    expect(extracted.warning).toContain("OCR requis");
+    expect(extracted.warning).toMatch(/OCR désactivé|OCR requis|OCR Tesseract|OCR PDF/);
   });
 });

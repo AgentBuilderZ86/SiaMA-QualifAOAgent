@@ -61,21 +61,26 @@ export async function reassignmentDecisionAction(formData: FormData) {
   redirect(pathFor(aoNum));
 }
 
-export type QualificationActionState = { error: string };
+export type QualificationActionState = { error: string; ok?: boolean };
 
 export async function qualificationAction(_prevState: QualificationActionState, formData: FormData): Promise<QualificationActionState> {
-  let aoNum = String(formData.get("aoNum") || "");
   try {
     const actor = await requireUser();
-    aoNum = String(formData.get("aoNum") || "");
+    const aoNum = String(formData.get("aoNum") || "");
     if (!aoNum.trim()) throw new Error("AO introuvable : identifiant manquant.");
     await saveQualification(aoNum, actor, formData);
     revalidatePath("/dashboard");
     revalidatePath(pathFor(aoNum));
+    return { error: "", ok: true };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Erreur inconnue pendant la génération de la fiche." };
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+          ? e
+          : "Erreur inconnue pendant la génération de la fiche.";
+    return { error: message };
   }
-  redirect(pathFor(aoNum));
 }
 
 export async function simulationAction(formData: FormData) {

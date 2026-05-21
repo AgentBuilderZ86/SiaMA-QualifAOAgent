@@ -21,6 +21,10 @@
 [functions."refresh-ao-sources"]
   schedule = "0 */6 * * *"
 
-## Large uploads: Server Actions body size is controlled by Next config
-## but Netlify functions may have limits; keep documents reasonably sized.
+## Server Actions (qualification ZIP + IA) : timeout max Netlify (60 s sur offres payantes).
+[functions]
+  node_bundler = "esbuild"
+
+## Large uploads: Server Actions body size is controlled by Next config (26mb)
+## ; archives ZIP plafonnées à 25 Mo côté application.
 
