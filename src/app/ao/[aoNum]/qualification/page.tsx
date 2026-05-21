@@ -8,6 +8,8 @@ import { QualificationForm } from "./QualificationForm";
 
 /** Évite toute optimisation statique qui pourrait retarder la mise à jour d’URL côté client au changement d’onglet rail. */
 export const dynamic = "force-dynamic";
+/** ZIP + extraction + IA : dépasse souvent la limite serverless par défaut (26 s sur Netlify). */
+export const maxDuration = 60;
 
 export default async function QualificationPage({
   params,

@@ -38,7 +38,9 @@ export const MAX_EXTRACT_CHARS = 50000;
 /** Texte max par fichier dans une archive avant concaténation globale. */
 const MAX_ZIP_ENTRY_CHARS = 25000;
 /** Taille max fichier ZIP uploadé. */
-const MAX_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024;
+export const MAX_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024;
+/** Nombre max de fichiers PDF/DOCX/TXT traités dans une archive (limite temps serverless). */
+const MAX_ZIP_ENTRIES = 24;
 /** Taille max d’un PDF brut avant extraction. */
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const MIN_TEXT_CHARS_BEFORE_OCR = 180;
@@ -175,16 +177,23 @@ export function extractDocumentSections(text: string): DocumentSections {
   };
 }
 
+type PdfParseFn = (data: Buffer) => Promise<{ text: string; numpages: number }>;
+let cachedPdfParse: PdfParseFn | null = null;
+
+async function loadPdfParse(): Promise<PdfParseFn> {
+  if (cachedPdfParse) return cachedPdfParse;
+  // pdf-parse/index.js lance un readFileSync de test quand module.parent est absent (ESM / serverless).
+  const pdfParseMod = await import("pdf-parse/lib/pdf-parse.js");
+  cachedPdfParse = (pdfParseMod.default ?? pdfParseMod) as PdfParseFn;
+  return cachedPdfParse;
+}
+
 async function extractPdfBuffer(buffer: Buffer): Promise<{ text: string; warning: string }> {
   if (buffer.length > MAX_PDF_BYTES) {
     return { text: "", warning: `PDF trop volumineux (max ${Math.round(MAX_PDF_BYTES / (1024 * 1024))} Mo).` };
   }
   try {
-    // pdf-parse/index.js lance un readFileSync de test quand module.parent est absent (ESM / serverless).
-    const pdfParseMod = await import("pdf-parse/lib/pdf-parse.js");
-    const pdfParse = (pdfParseMod.default ?? pdfParseMod) as (
-      data: Buffer
-    ) => Promise<{ text: string; numpages: number }>;
+    const pdfParse = await loadPdfParse();
     const data = await pdfParse(buffer);
     const raw = cleanText(data.text || "").slice(0, MAX_ZIP_ENTRY_CHARS);
     let warning = "";
@@ -296,12 +305,24 @@ async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<Extr
     .filter((n) => !zip.files[n].dir)
     .sort();
 
+  const supported = names.filter((path) => {
+    const base = path.split("/").pop() || path;
+    const ext = base.split(".").pop()?.toLowerCase() || "";
+    return ["pdf", "docx", "txt"].includes(ext);
+  });
+  if (supported.length > MAX_ZIP_ENTRIES) {
+    warnings.push(`Archive : seuls les ${MAX_ZIP_ENTRIES} premiers fichiers PDF/DOCX/TXT sont traités.`);
+  }
+
+  let processed = 0;
   for (const path of names) {
     const entry = zip.files[path];
     const base = path.split("/").pop() || path;
     const ext = base.split(".").pop()?.toLowerCase() || "";
 
     if (!["pdf", "docx", "txt"].includes(ext)) continue;
+    if (processed >= MAX_ZIP_ENTRIES) break;
+    processed += 1;
 
     let buf: Buffer;
     try {
