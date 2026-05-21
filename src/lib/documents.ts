@@ -180,8 +180,9 @@ async function extractPdfBuffer(buffer: Buffer): Promise<{ text: string; warning
     return { text: "", warning: `PDF trop volumineux (max ${Math.round(MAX_PDF_BYTES / (1024 * 1024))} Mo).` };
   }
   try {
-    const pdfParseMod = await import("pdf-parse");
-    const pdfParse = pdfParseMod.default as unknown as (
+    // pdf-parse/index.js lance un readFileSync de test quand module.parent est absent (ESM / serverless).
+    const pdfParseMod = await import("pdf-parse/lib/pdf-parse.js");
+    const pdfParse = (pdfParseMod.default ?? pdfParseMod) as (
       data: Buffer
     ) => Promise<{ text: string; numpages: number }>;
     const data = await pdfParse(buffer);

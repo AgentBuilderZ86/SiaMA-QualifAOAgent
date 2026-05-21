@@ -26,6 +26,17 @@ describe("extractDocumentBuffer", () => {
     expect(documents.map((document) => document.name)).toEqual(["avis.txt", "cps.txt", "rc.txt"]);
   });
 
+  it("n'échoue pas à l'import du parseur PDF (régression pdf-parse debug)", async () => {
+    const extracted = await extractDocumentBuffer({
+      name: "minimal.pdf",
+      contentType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n%%EOF", "utf8")
+    });
+
+    expect(extracted.warning).not.toContain("ENOENT");
+    expect(extracted.warning).not.toMatch(/test\/data\/05-versions-space/);
+  });
+
   it("signale explicitement un besoin OCR quand un PDF n'a pas de texte exploitable", async () => {
     const previousProvider = process.env.OCR_PROVIDER;
     process.env.OCR_PROVIDER = "none";
