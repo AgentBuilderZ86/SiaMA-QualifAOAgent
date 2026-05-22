@@ -159,3 +159,49 @@ export async function completeChat(options: CompleteChatOptions): Promise<string
     maxOutputTokens: Math.min(Math.max(maxOutputTokens, 256), 128000)
   });
 }
+
+/**
+ * Extrait le texte d'un PDF scanné en l'envoyant à Claude (vision via document input).
+ * Utilise claude-haiku (rapide et économique) — fonctionne même sans texte natif.
+ * Retourne null si l'API Anthropic n'est pas configurée ou si l'extraction échoue.
+ */
+export async function extractPdfTextVision(pdfBuffer: Buffer): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  const base64 = pdfBuffer.toString("base64");
+
+  const response = await fetch(ANTHROPIC_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": ANTHROPIC_VERSION,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: base64 }
+            },
+            {
+              type: "text",
+              text: "Extrais le texte intégral de ce document d'appel d'offres. Retourne uniquement le texte brut extrait, sans commentaires ni reformulation. Préserve la structure : titres, articles, tableaux, montants."
+            }
+          ]
+        }
+      ]
+    })
+  });
+
+  const json = await response.json().catch(() => null);
+  if (!response.ok) return null;
+  const text = anthropicTextFromResponse(json);
+  return text.trim() || null;
+}
+

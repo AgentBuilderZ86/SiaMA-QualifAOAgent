@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { extractDocumentBuffer } from "@/lib/documents";
+import { extractPdfTextVision } from "@/lib/llmChat";
 import { logger } from "@/lib/logger";
 import type { QualificationDocumentKind } from "@/lib/aoTypes";
 
@@ -54,15 +55,34 @@ export async function POST(
       kind
     });
 
-    // Scanned PDFs / images have no native text — guide the user
-    const isScanned = !result.text.trim() && isPdfOrImage(file.name, file.type || "");
-    const warning = isScanned
-      ? "PDF scanné ou sans texte natif. Collez le texte clé (objet, périmètre, budget, critères) dans la zone d'extrait manuel."
-      : result.warning;
+    // Scanned PDFs have no native text layer — try Claude vision as fallback
+    const isPdf = file.name.toLowerCase().endsWith(".pdf") || (file.type || "").includes("pdf");
+    const isScanned = !result.text.trim() && isPdf;
+
+    if (isScanned) {
+      const visionText = await extractPdfTextVision(buffer).catch(() => null);
+      if (visionText) {
+        return NextResponse.json({
+          text: visionText,
+          warning: "PDF scanné — texte extrait par analyse IA (Claude vision).",
+          kind: result.kind ?? kind,
+          ocrUsed: true,
+          extractionMode: "ocr"
+        });
+      }
+      // Vision not available or failed — guide user to paste manually
+      return NextResponse.json({
+        text: "",
+        warning: "PDF scanné ou sans texte natif. ANTHROPIC_API_KEY non configurée ou extraction IA indisponible. Collez le texte clé dans la zone ci-dessous.",
+        kind: result.kind ?? kind,
+        ocrUsed: false,
+        extractionMode: "unreadable"
+      });
+    }
 
     return NextResponse.json({
       text: result.text,
-      warning,
+      warning: result.warning,
       kind: result.kind ?? kind,
       ocrUsed: false,
       extractionMode: result.text.trim() ? "native" : "unreadable"

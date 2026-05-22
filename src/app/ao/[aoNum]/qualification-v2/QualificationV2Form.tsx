@@ -80,7 +80,7 @@ function statusBadge(doc: DocState): { label: string; color: "green" | "orange" 
     return { label: "⚠ PDF scanné — collez le texte dans la zone ci-dessous", color: "orange" };
   }
   if (doc.ocrUsed) {
-    return { label: `✓ OCR appliqué — ${doc.text.length.toLocaleString()} car.`, color: "orange" };
+    return { label: `✓ Lecture IA (vision) — ${doc.text.length.toLocaleString()} car.`, color: "green" };
   }
   return { label: `✓ ${doc.text.length.toLocaleString()} car. extraits`, color: "green" };
 }
