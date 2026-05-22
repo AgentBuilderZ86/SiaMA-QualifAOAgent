@@ -106,10 +106,9 @@ describe("aoService saveQualification", () => {
 
     expect(fiche.documents).toHaveLength(4);
     expect(fiche.documents?.map((document) => document.kind)).toEqual(["Avis", "CPS", "RC", "RC"]);
-    expect(fiche.documentExtract).toContain("--- Document Avis : avis.txt ---");
-    expect(fiche.documentExtract).toContain("--- Document CPS : cps.txt ---");
-    expect(fiche.documentExtract).toContain("--- Document RC : rc.txt ---");
-    expect(fiche.documentExtract).toContain("rc-source.pdf");
+    // After LLM remap, documentExtract contains the intelligence summary, not raw document headers
+    expect(fiche.documentExtract).toContain("Synthèse test");
+    expect(fiche.documentExtract).toContain("Contexte test");
     expect(fiche.extractionStatus).toContain("4 document(s) analysé(s)");
     expect(repo.upsertPipeline).toHaveBeenCalledWith(
       expect.any(Object),
@@ -215,7 +214,8 @@ describe("aoService saveQualification", () => {
     const fiche = "extractOnly" in result ? result.fiche : result;
 
     expect(fiche.documentName).toBe("ancien-rc.pdf");
-    expect(fiche.documentExtract).toContain("Ancien extrait documentaire fiable");
+    // After LLM remap, documentExtract contains the intelligence summary, not the raw preserved text
+    expect(fiche.documentExtract).toContain("Synthèse test");
     expect(fiche.documents?.[0]?.name).toBe("ancien-rc.pdf");
   });
 });
