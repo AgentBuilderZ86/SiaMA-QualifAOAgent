@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { extractDocumentBufferWithOcr } from "@/lib/documents";
+import { extractDocumentBuffer } from "@/lib/documents";
 import { logger } from "@/lib/logger";
 import type { QualificationDocumentKind } from "@/lib/aoTypes";
 
@@ -15,6 +15,11 @@ function kindFromField(field: string): QualificationDocumentKind {
   if (field === "documentCps") return "CPS";
   if (field === "documentRc") return "RC";
   return "Autre";
+}
+
+function isPdfOrImage(name: string, contentType: string) {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return ext === "pdf" || contentType.includes("pdf") || ["png", "jpg", "jpeg", "tif", "tiff"].includes(ext);
 }
 
 export async function POST(
@@ -35,25 +40,32 @@ export async function POST(
     if (file.size > MAX_FILE_BYTES) {
       return NextResponse.json({
         text: "",
-        warning: `Fichier trop volumineux (${(file.size / (1024 * 1024)).toFixed(1)} Mo — limite 5 Mo). Collez le texte clé dans la zone d'extrait manuel.`
+        warning: `Fichier trop volumineux (${(file.size / (1024 * 1024)).toFixed(1)} Mo — limite 5 Mo). Collez le texte clé dans la zone d'extrait manuel ci-dessous.`,
+        extractionMode: "unreadable"
       });
     }
 
     const kind = kindFromField(fieldName);
     const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await extractDocumentBufferWithOcr({
+    const result = await extractDocumentBuffer({
       name: file.name,
       buffer,
       contentType: file.type || "",
       kind
     });
 
+    // Scanned PDFs / images have no native text — guide the user
+    const isScanned = !result.text.trim() && isPdfOrImage(file.name, file.type || "");
+    const warning = isScanned
+      ? "PDF scanné ou sans texte natif. Collez le texte clé (objet, périmètre, budget, critères) dans la zone d'extrait manuel."
+      : result.warning;
+
     return NextResponse.json({
       text: result.text,
-      warning: result.warning,
+      warning,
       kind: result.kind ?? kind,
-      ocrUsed: result.ocrUsed ?? false,
-      extractionMode: result.extractionMode ?? (result.text ? "native" : "unreadable")
+      ocrUsed: false,
+      extractionMode: result.text.trim() ? "native" : "unreadable"
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erreur lors de l'extraction.";
@@ -61,3 +73,4 @@ export async function POST(
     return NextResponse.json({ text: "", warning: message }, { status: 400 });
   }
 }
+

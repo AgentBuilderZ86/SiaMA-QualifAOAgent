@@ -77,7 +77,7 @@ function statusBadge(doc: DocState): { label: string; color: "green" | "orange" 
   if (doc.extracting) return { label: "Extraction en cours…", color: "gray" };
   if (!doc.text && !doc.file) return { label: "Aucun document", color: "gray" };
   if (!doc.text && doc.file) {
-    return { label: "⚠ Texte non extrait — collez ci-dessous", color: "orange" };
+    return { label: "⚠ PDF scanné — collez le texte dans la zone ci-dessous", color: "orange" };
   }
   if (doc.ocrUsed) {
     return { label: `✓ OCR appliqué — ${doc.text.length.toLocaleString()} car.`, color: "orange" };
@@ -136,7 +136,8 @@ export function QualificationV2Form({
           warning: data.warning,
           ocrUsed: data.ocrUsed ?? false,
           extractionMode: data.extractionMode ?? "native",
-          expanded: Boolean(data.text)
+          // Auto-expand: always open when scanned (no text) so textarea is visible for manual paste
+          expanded: true
         }
       }));
     } catch {
