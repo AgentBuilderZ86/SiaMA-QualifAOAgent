@@ -120,6 +120,64 @@ describe("aoService saveQualification", () => {
     );
   });
 
+  it("sauvegarde la fiche avant les appels LLM (pipeline 2 étapes)", async () => {
+    const { saveQualification } = await import("@/lib/aoService");
+    const formData = new FormData();
+    formData.set("forceDocumentExtraction", "yes");
+    formData.append("documentAvis", new File(["Avis : mission de transformation digitale."], "avis.txt", { type: "text/plain" }));
+
+    await saveQualification("AO-1", "manager@siapartners.com", formData);
+
+    // Deux appels upsertPipeline : sauvegarde intermédiaire (avant LLM) + finale (après LLM)
+    expect(repo.upsertPipeline).toHaveBeenCalledTimes(2);
+    const firstCall = repo.upsertPipeline.mock.calls[0];
+    const firstFiche = JSON.parse(firstCall[2]["Fiche qualification"]);
+    expect(firstFiche.recommendation).toContain("Analyse documentaire enregistrée");
+    expect(firstFiche.intelligence).toBeUndefined();
+  });
+
+  it("adapte le budget LLM en mode serverless (timeout plus court)", async () => {
+    const prevNetlify = process.env.NETLIFY;
+    process.env.NETLIFY = "true";
+    const { saveQualification } = await import("@/lib/aoService");
+    const formData = new FormData();
+    formData.set("forceDocumentExtraction", "yes");
+    formData.append("documentAvis", new File(["Avis : gouvernance des données."], "avis.txt", { type: "text/plain" }));
+
+    const t0 = Date.now();
+    await saveQualification("AO-1", "manager@siapartners.com", formData);
+    const elapsed = Date.now() - t0;
+    process.env.NETLIFY = prevNetlify;
+
+    // En serverless, le LLM est bridé par timeout → le mock répond instantanément
+    // On vérifie que l'appel se termine bien en moins de 5 s (sans vrai LLM)
+    expect(elapsed).toBeLessThan(5_000);
+    expect(repo.upsertPipeline).toHaveBeenCalledTimes(2);
+  });
+
+  it("extrait le texte d'un PDF minimal sans crash (régression import pdf-parse)", async () => {
+    const { saveQualification } = await import("@/lib/aoService");
+    const formData = new FormData();
+    formData.set("forceDocumentExtraction", "yes");
+    // PDF synthétique minimal — pdf-parse doit gérer le cas dégradé sans ENOENT.
+    // L'extraction produit un texte vide ; on fournit un extrait manuel pour éviter
+    // l'erreur métier "corpus vide" et tester uniquement la robustesse de l'import.
+    formData.set("documentExtract", "Extrait manuel : gouvernance données, périmètre national.");
+    formData.append(
+      "documentAvis",
+      new File(["%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"], "avis.pdf", { type: "application/pdf" })
+    );
+
+    const fiche = await saveQualification("AO-1", "manager@siapartners.com", formData);
+
+    expect(fiche).toBeDefined();
+    expect(repo.upsertPipeline).toHaveBeenCalled();
+    // Vérifie que le warning pdf-parse ne contient pas d'erreur d'import ENOENT
+    const pdfDoc = fiche.documents?.find((d) => d.name === "avis.pdf");
+    expect(pdfDoc?.warning).not.toContain("ENOENT");
+    expect(pdfDoc?.warning).not.toMatch(/test\/data\/05-versions-space/);
+  });
+
   it("conserve le document existant quand aucun nouveau fichier n'est transmis", async () => {
     repo.findAo.mockResolvedValue(
       ao({

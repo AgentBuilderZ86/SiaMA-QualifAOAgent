@@ -2,6 +2,11 @@ import crypto from "node:crypto";
 import { ocrPdfBuffer } from "@/lib/ocr/pdfRasterOcr";
 import { recognizeImageBuffer } from "@/lib/ocr/tesseractOcr";
 import type { QualificationDocumentExtraction, QualificationDocumentKind } from "@/lib/aoTypes";
+import {
+  DOCUMENT_LIMITS,
+  OCR_MAX_POLLS,
+  OCR_POLL_INTERVAL_MS,
+} from "@/lib/constants";
 
 export type ExtractedDocument = {
   name: string;
@@ -35,23 +40,16 @@ type DocumentBufferInput = {
   sourceUrl?: string;
 };
 
-/** Limite globale de caractères conservée pour scoring / LLM (évite OOM serverless). */
-export const MAX_EXTRACT_CHARS = 50000;
-/** Texte max par fichier dans une archive avant concaténation globale. */
-const MAX_ZIP_ENTRY_CHARS = 25000;
-/** Taille max fichier ZIP uploadé. */
-export const MAX_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024;
-/** Nombre max de fichiers PDF/DOCX/TXT traités dans une archive (limite temps serverless). */
-const MAX_ZIP_ENTRIES_LOCAL = 24;
-const MAX_ZIP_ENTRIES_SERVERLESS = 10;
-/** OCR différé dans un ZIP : au plus N fichiers (Tesseract est lent sur Netlify). */
-const MAX_ZIP_DEFERRED_OCR_SERVERLESS = 2;
-const MAX_ZIP_DEFERRED_OCR_LOCAL = 4;
-/** Taille max d’un PDF brut avant extraction. */
-const MAX_PDF_BYTES = 20 * 1024 * 1024;
-const MIN_TEXT_CHARS_BEFORE_OCR = 180;
-const OCR_POLL_INTERVAL_MS = 1_000;
-const OCR_MAX_POLLS = 30;
+export const MAX_EXTRACT_CHARS = DOCUMENT_LIMITS.maxExtractChars;
+export const MAX_ZIP_UPLOAD_BYTES = DOCUMENT_LIMITS.maxZipUploadBytes;
+
+const MAX_ZIP_ENTRY_CHARS = DOCUMENT_LIMITS.maxZipEntryChars;
+const MAX_ZIP_ENTRIES_LOCAL = DOCUMENT_LIMITS.maxZipEntriesLocal;
+const MAX_ZIP_ENTRIES_SERVERLESS = DOCUMENT_LIMITS.maxZipEntriesServerless;
+const MAX_ZIP_DEFERRED_OCR_SERVERLESS = DOCUMENT_LIMITS.maxZipDeferredOcrServerless;
+const MAX_ZIP_DEFERRED_OCR_LOCAL = DOCUMENT_LIMITS.maxZipDeferredOcrLocal;
+const MAX_PDF_BYTES = DOCUMENT_LIMITS.maxPdfBytes;
+const MIN_TEXT_CHARS_BEFORE_OCR = DOCUMENT_LIMITS.minTextCharsBeforeOcr;
 
 export function isServerlessRuntime() {
   return Boolean(process.env.NETLIFY === "true" || process.env.NETLIFY === "1" || process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -63,8 +61,7 @@ const KIND_OCR_PRIORITY: Record<QualificationDocumentKind, number> = {
   RC: 2,
   Autre: 9
 };
-/** Si le texte natif cumulé dépasse ce seuil, on évite l'OCR sur Netlify (gain 10–30 s). */
-const SERVERLESS_SKIP_OCR_IF_NATIVE_CHARS = 1200;
+const SERVERLESS_SKIP_OCR_IF_NATIVE_CHARS = DOCUMENT_LIMITS.serverlessSkipOcrIfNativeChars;
 
 function maxZipEntries() {
   return isServerlessRuntime() ? MAX_ZIP_ENTRIES_SERVERLESS : MAX_ZIP_ENTRIES_LOCAL;
