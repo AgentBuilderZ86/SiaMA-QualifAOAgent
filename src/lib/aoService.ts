@@ -437,11 +437,19 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
         }
       : undefined;
 
+  const zipMode = documents.some((document) => /\.zip$/i.test(document.name || ""));
+  const enrichWebRequested = formData.get("enrichWeb") === "yes";
+  const enrichWeb = zipMode ? false : enrichWebRequested;
+
   const pipelineNotes = (() => {
     const base = documentExtractionStatus(documents, manualExtract);
+    const zipNote = zipMode
+      ? "Mode archive ZIP : extraction native prioritaire, OCR limité (2 fichiers), enrichWeb désactivé."
+      : "";
+    const enrichNote = zipMode && enrichWebRequested ? "Enrichissement web ignoré pour respecter le délai serveur." : "";
     const hint = meta.matchNotes[0];
-    if (hint && base.length < 350) return [base, hint].filter(Boolean).join(" · ");
-    return base;
+    const merged = [base, zipNote, enrichNote, hint && base.length < 350 ? hint : ""].filter(Boolean).join(" · ");
+    return merged;
   })();
 
   const fiche: QualificationFiche = {
@@ -471,8 +479,19 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
     filenameSignals: Object.keys(filenameSignals).length ? filenameSignals : undefined,
     extractionEvidence
   };
-  fiche.recommendation = await generateQualificationRecommendation(ao, fiche);
-  fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, formData.get("enrichWeb") === "yes");
+  const llmTimeoutMs = zipMode ? 18_000 : undefined;
+  fiche.recommendation = await Promise.race([
+    generateQualificationRecommendation(ao, fiche),
+    new Promise<string>((resolve) =>
+      setTimeout(
+        () => resolve("Recommandation : analyse documentaire disponible — fiche intelligente complétée en mode dégradé (archive ZIP)."),
+        zipMode ? 8_000 : 60_000
+      )
+    )
+  ]);
+  fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, enrichWeb, {
+    llmTimeoutMs: llmTimeoutMs ?? 0
+  });
 
   await aoRepository.upsertPipeline(ao, "BO", {
     "Fiche qualification": JSON.stringify(fiche),

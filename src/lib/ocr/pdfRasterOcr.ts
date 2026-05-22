@@ -2,8 +2,16 @@ import { createCanvas } from "@napi-rs/canvas";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { recognizeImageBuffer } from "@/lib/ocr/tesseractOcr";
 
-const MAX_OCR_PAGES = 4;
 const RENDER_SCALE = 1.4;
+
+function maxOcrPages() {
+  const configured = Number(process.env.AO_OCR_MAX_PDF_PAGES || "");
+  if (Number.isFinite(configured) && configured > 0) return Math.min(configured, 8);
+  if (process.env.NETLIFY === "true" || process.env.NETLIFY === "1" || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return 2;
+  }
+  return 4;
+}
 
 export async function ocrPdfBuffer(buffer: Buffer): Promise<{ text: string; warning: string }> {
   if (!buffer.length) return { text: "", warning: "PDF vide." };
@@ -19,9 +27,10 @@ export async function ocrPdfBuffer(buffer: Buffer): Promise<{ text: string; warn
     }).promise;
 
     const total = doc.numPages;
-    const pages = Math.min(total, MAX_OCR_PAGES);
-    if (total > MAX_OCR_PAGES) {
-      warnings.push(`OCR PDF : ${MAX_OCR_PAGES}/${total} pages analysées (limite performance).`);
+    const pageLimit = maxOcrPages();
+    const pages = Math.min(total, pageLimit);
+    if (total > pageLimit) {
+      warnings.push(`OCR PDF : ${pageLimit}/${total} pages analysées (limite performance).`);
     }
 
     for (let pageNum = 1; pageNum <= pages; pageNum += 1) {

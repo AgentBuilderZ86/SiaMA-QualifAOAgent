@@ -101,7 +101,7 @@ export function QualificationForm({
         ) : (
           <>
             <strong>Dossier documentaire AO</strong>
-            <span>Déposez l’avis, le CPS et le RC, ou un ZIP complet. PDF scannés et images : OCR Tesseract automatique.</span>
+            <span>Déposez l’avis, le CPS et le RC, ou un ZIP complet. Sur ZIP : extraction rapide + OCR limité (priorité avis/CPS/RC).</span>
           </>
         )}
       </div>

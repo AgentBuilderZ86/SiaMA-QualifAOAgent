@@ -42,12 +42,37 @@ const MAX_ZIP_ENTRY_CHARS = 25000;
 /** Taille max fichier ZIP uploadé. */
 export const MAX_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024;
 /** Nombre max de fichiers PDF/DOCX/TXT traités dans une archive (limite temps serverless). */
-const MAX_ZIP_ENTRIES = 24;
+const MAX_ZIP_ENTRIES_LOCAL = 24;
+const MAX_ZIP_ENTRIES_SERVERLESS = 10;
+/** OCR différé dans un ZIP : au plus N fichiers (Tesseract est lent sur Netlify). */
+const MAX_ZIP_DEFERRED_OCR_SERVERLESS = 2;
+const MAX_ZIP_DEFERRED_OCR_LOCAL = 4;
 /** Taille max d’un PDF brut avant extraction. */
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const MIN_TEXT_CHARS_BEFORE_OCR = 180;
 const OCR_POLL_INTERVAL_MS = 1_000;
 const OCR_MAX_POLLS = 30;
+
+function isServerlessRuntime() {
+  return Boolean(process.env.NETLIFY === "true" || process.env.NETLIFY === "1" || process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
+
+function maxZipEntries() {
+  return isServerlessRuntime() ? MAX_ZIP_ENTRIES_SERVERLESS : MAX_ZIP_ENTRIES_LOCAL;
+}
+
+function maxZipDeferredOcr() {
+  return isServerlessRuntime() ? MAX_ZIP_DEFERRED_OCR_SERVERLESS : MAX_ZIP_DEFERRED_OCR_LOCAL;
+}
+
+function zipEntryPriority(path: string) {
+  const lower = path.toLowerCase();
+  if (/avis|aao|appel.?off/i.test(lower)) return 0;
+  if (/cps|cctp|dce|cahier/i.test(lower)) return 1;
+  if (/(^|\/)(rc|reglement)[^a-z]|consultation/i.test(lower)) return 2;
+  if (/bpu|financ|prix/i.test(lower)) return 4;
+  return 5;
+}
 
 function cleanText(value: string) {
   return value
@@ -330,10 +355,12 @@ async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<Extr
     const ext = base.split(".").pop()?.toLowerCase() || "";
     return zipSupportedExtensions.includes(ext);
   });
-  if (supported.length > MAX_ZIP_ENTRIES) {
-    warnings.push(`Archive : seuls les ${MAX_ZIP_ENTRIES} premiers fichiers PDF/DOCX/TXT sont traités.`);
+  const zipEntryLimit = maxZipEntries();
+  if (supported.length > zipEntryLimit) {
+    warnings.push(`Archive : seuls les ${zipEntryLimit} premiers fichiers PDF/DOCX/TXT sont traités.`);
   }
 
+  const ocrCandidates: Array<{ path: string; base: string; buffer: Buffer; contentType: string }> = [];
   let processed = 0;
   for (const path of names) {
     const entry = zip.files[path];
@@ -341,7 +368,7 @@ async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<Extr
     const ext = base.split(".").pop()?.toLowerCase() || "";
 
     if (!zipSupportedExtensions.includes(ext)) continue;
-    if (processed >= MAX_ZIP_ENTRIES) break;
+    if (processed >= zipEntryLimit) break;
     processed += 1;
 
     let buf: Buffer;
@@ -374,18 +401,29 @@ async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<Extr
         warnings.push(`DOCX ${path} : ${error instanceof Error ? error.message : "erreur"}`);
         continue;
       }
-    } else if (ext === "pdf" || isImageFile(ext)) {
-      const r = await extractDocumentBufferWithOcr({
-        name: base,
-        buffer: buf,
-        contentType: ext === "pdf" ? "application/pdf" : `image/${ext === "jpg" ? "jpeg" : ext}`
-      });
+    } else if (ext === "pdf") {
+      const r = await extractPdfBuffer(buf);
       chunk = r.text;
       if (r.warning) localWarning = `${base}: ${r.warning}`;
-      if (!chunk.trim() && r.extractionMode === "unreadable") {
-        warnings.push(r.warning || `Lecture impossible : ${path}`);
+      if (chunk.trim().length < MIN_TEXT_CHARS_BEFORE_OCR) {
+        ocrCandidates.push({
+          path,
+          base,
+          buffer: buf,
+          contentType: "application/pdf"
+        });
+      }
+    } else if (isImageFile(ext)) {
+      if (isServerlessRuntime()) {
+        warnings.push(`Image ${path} : OCR ZIP désactivé sur serverless (déposez en fichier séparé si besoin).`);
         continue;
       }
+      ocrCandidates.push({
+        path,
+        base,
+        buffer: buf,
+        contentType: `image/${ext === "jpg" ? "jpeg" : ext}`
+      });
     }
 
     chunk = chunk.slice(0, MAX_ZIP_ENTRY_CHARS);
@@ -397,6 +435,31 @@ async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<Extr
     parts.push(sep + chunk);
     totalLen += sep.length + chunk.length;
     if (localWarning) warnings.push(localWarning);
+  }
+
+  const deferredLimit = maxZipDeferredOcr();
+  const sortedCandidates = ocrCandidates.sort((a, b) => zipEntryPriority(a.path) - zipEntryPriority(b.path));
+  for (const candidate of sortedCandidates.slice(0, deferredLimit)) {
+    const ocr = await extractDocumentBufferWithOcr({
+      name: candidate.base,
+      buffer: candidate.buffer,
+      contentType: candidate.contentType
+    });
+    const chunk = ocr.text.slice(0, MAX_ZIP_ENTRY_CHARS);
+    if (!chunk.trim()) {
+      if (ocr.warning) warnings.push(`${candidate.path}: ${ocr.warning}`);
+      continue;
+    }
+    const sep = `\n\n--- Fichier ZIP (OCR) : ${candidate.path} ---\n\n`;
+    if (totalLen + sep.length + chunk.length > MAX_EXTRACT_CHARS) {
+      warnings.push("Archive tronquée après OCR : limite de texte globale atteinte.");
+      break;
+    }
+    parts.push(sep + chunk);
+    totalLen += sep.length + chunk.length;
+  }
+  if (ocrCandidates.length > deferredLimit) {
+    warnings.push(`OCR ZIP : ${deferredLimit}/${ocrCandidates.length} fichiers scannés traités (limite Netlify).`);
   }
 
   const text = parts.join("").slice(0, MAX_EXTRACT_CHARS);

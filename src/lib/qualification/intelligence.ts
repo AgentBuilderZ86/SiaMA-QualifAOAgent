@@ -1041,11 +1041,16 @@ async function callQualificationLlm(
   return parseJsonObject(content);
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function generateIntelligentQualification(
   ao: AoRecord,
   fiche: QualificationFiche,
   referentials: ReferentielItem[],
-  enrichWeb: boolean
+  enrichWeb: boolean,
+  options: { llmTimeoutMs?: number } = {}
 ): Promise<IntelligentQualificationFiche> {
   const sources = await researchQualificationContext(ao, enrichWeb);
   const patternScore = scoreAoFromPatterns(`${fiche.documentExtract || ""}\n${fiche.objet || ""}\n${fiche.perimetre || ""}\n${fiche.livrables || ""}\n${fiche.criteres || ""}`, ao.client || "");
@@ -1054,6 +1059,18 @@ export async function generateIntelligentQualification(
     sources.length ? "" : "Aucune source externe fiable n'a été trouvée automatiquement.",
     `Patterns Sia détectés : ${patternScore.activated.length ? patternScore.activated.map((hit) => hit.patternId).join(", ") : "aucun"}.`
   ].filter(Boolean);
-  const raw = await callQualificationLlm(ao, fiche, sources, referentials, patternScore).catch(() => null);
+
+  const llmTimeoutMs = options.llmTimeoutMs ?? 0;
+  let raw: Record<string, unknown> | null = null;
+  if (llmTimeoutMs > 0) {
+    raw = await Promise.race([
+      callQualificationLlm(ao, fiche, sources, referentials, patternScore).catch(() => null),
+      sleep(llmTimeoutMs).then(() => null)
+    ]);
+    if (!raw) assumptions.push(`Analyse LLM tronquée après ${Math.round(llmTimeoutMs / 1000)} s (mode archive ZIP / serverless).`);
+  } else {
+    raw = await callQualificationLlm(ao, fiche, sources, referentials, patternScore).catch(() => null);
+  }
+
   return normalizeIntelligence(ao, fiche, raw, sources, assumptions, { patternScore, referentials });
 }
