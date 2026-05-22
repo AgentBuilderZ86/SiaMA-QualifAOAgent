@@ -1,6 +1,16 @@
 import { createCanvas } from "@napi-rs/canvas";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { createRequire } from "node:module";
 import { recognizeImageBuffer } from "@/lib/ocr/tesseractOcr";
+
+// Résolution absolue du worker — obligatoire sur Netlify/Lambda (esbuild ne supporte pas les chemins relatifs ESM)
+try {
+  GlobalWorkerOptions.workerSrc = createRequire(import.meta.url).resolve(
+    "pdfjs-dist/legacy/build/pdf.worker.mjs"
+  );
+} catch {
+  // Si la résolution échoue, ocrPdfBuffer catchera l'erreur pdfjs localement
+}
 
 const RENDER_SCALE = 1.4;
 
