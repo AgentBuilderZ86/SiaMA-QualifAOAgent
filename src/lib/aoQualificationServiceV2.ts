@@ -8,12 +8,42 @@ import { NETLIFY_MAX_DURATION_MS, QUALIFICATION_BUDGET_MS } from "@/lib/constant
 import { extractKeyMetadata, isPlaceholderSection } from "@/lib/qualification/documentMetadata";
 import { filenameSignalsPrefix, parseFilenameSignals } from "@/lib/qualification/filenameSignals";
 import { generateQualificationRecommendation } from "@/lib/llm";
+import { completeChat } from "@/lib/llmChat";
 import { generateIntelligentQualification } from "@/lib/qualification/intelligence";
 import type {
   QualificationDocumentExtraction,
   QualificationDocumentKind,
   QualificationFiche
 } from "@/lib/aoTypes";
+
+// ─── Pre-summary (boilerplate filter) ────────────────────────────────────────
+
+async function extractBusinessContent(rawText: string): Promise<string | null> {
+  const result = await completeChat({
+    system:
+      "Tu es expert en qualification d'appels d'offres publics. " +
+      "Extrait uniquement les informations business utiles du document. " +
+      "Ignore tout le boilerplate administratif et juridique (conditions de participation, caution, sous-traitance, pièces justificatives, articles légaux, etc.).",
+    user:
+      "Extrait du document ci-dessous les informations suivantes UNIQUEMENT si elles sont clairement mentionnées :\n" +
+      "1. Objet exact de la mission (1-2 phrases)\n" +
+      "2. Périmètre et livrables attendus\n" +
+      "3. Durée d'exécution\n" +
+      "4. Budget estimé ou montant indicatif (si mentionné)\n" +
+      "5. Critères d'évaluation technique avec pondérations\n" +
+      "6. Profils requis (niveau, expérience, compétences)\n" +
+      "7. Références similaires exigées\n" +
+      "8. Date limite de remise des offres\n" +
+      "9. Lieu d'exécution\n" +
+      "10. Modalités de paiement et jalons\n\n" +
+      "Pour chaque item non trouvé dans le document : ne pas inventer, omettre simplement.\n\n" +
+      "DOCUMENT :\n" +
+      rawText.slice(0, 15_000),
+    temperature: 0.1,
+    maxOutputTokens: 2_000
+  });
+  return result && result.length > 100 ? result : null;
+}
 
 export type DocumentInput = {
   name: string;
@@ -179,7 +209,14 @@ export async function saveQualificationV2(
     extractionEvidence
   };
 
-  // Adaptive LLM budget — based on elapsed time after Sheets reads
+  // Pre-summary: filter administrative boilerplate before LLM intelligence
+  // Uses Haiku (~5 s) so intelligence LLM gets clean business content instead of raw admin text
+  const businessSummary = await extractBusinessContent(documentExtract).catch(() => null);
+  const ficheForIntelligence: QualificationFiche = businessSummary
+    ? { ...fiche, documentExtract: businessSummary }
+    : fiche;
+
+  // Adaptive LLM budget — based on elapsed time after Sheets reads + pre-summary
   const serverless = isServerlessRuntime();
   const elapsedMs = Date.now() - startMs;
   const POST_LLM_RESERVE_MS = 4_000;
@@ -206,7 +243,7 @@ export async function saveQualificationV2(
         )
       )
     ]),
-    generateIntelligentQualification(ao, fiche, referentials, body.enrichWeb ?? false, {
+    generateIntelligentQualification(ao, ficheForIntelligence, referentials, body.enrichWeb ?? false, {
       llmTimeoutMs: adaptiveIntMs
     })
   ]);
