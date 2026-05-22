@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { saveQualification } from "@/lib/ao";
 import { requireUser } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ aoN
     const formData = await request.formData();
     formData.set("aoNum", aoNum);
 
-    await saveQualification(aoNum, actor, formData);
+    const result = await saveQualification(aoNum, actor, formData);
 
     const aoPath = pathFor(aoNum);
     const qualificationPath = `${aoPath}/qualification`;
@@ -28,6 +29,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ aoN
     revalidatePath(aoPath);
     revalidatePath(qualificationPath);
 
+    if (typeof result === "object" && "extractOnly" in result) {
+      return NextResponse.json({ ok: true as const, nextStage: "analyze" as const });
+    }
     return NextResponse.json({ ok: true as const, redirectTo: aoPath });
   } catch (error) {
     const message =
@@ -36,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ aoN
         : typeof error === "string"
           ? error
           : "Erreur inconnue pendant la génération de la fiche.";
-    console.error("[api/qualification]", aoNum, message, error);
+    logger.error("api/qualification", message, { aoNum, error: String(error) });
     return NextResponse.json({ ok: false as const, error: message }, { status: 400 });
   }
 }

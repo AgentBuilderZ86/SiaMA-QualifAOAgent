@@ -17,7 +17,7 @@ export default async function QualificationPage({
   searchParams
 }: {
   params: Promise<{ aoNum: string }>;
-  searchParams: Promise<{ error?: string; qualError?: string }>;
+  searchParams: Promise<{ error?: string; qualError?: string; resumeAI?: string }>;
 }) {
   const user = await requireUser();
   const { aoNum } = await params;
@@ -30,6 +30,7 @@ export default async function QualificationPage({
       return query.qualError;
     }
   })();
+  const resumeAI = query.resumeAI === "1";
   const detail = await getAoDetail(decodeURIComponent(aoNum));
   if (!detail) notFound();
   const { ao } = detail;
@@ -74,7 +75,7 @@ export default async function QualificationPage({
         </div>
       ) : null}
 
-      <QualificationForm aoNum={ao.aoNum} hasSourceUrl={Boolean(ao.sourceUrl)} initialError={qualError} />
+      <QualificationForm aoNum={ao.aoNum} hasSourceUrl={Boolean(ao.sourceUrl)} initialError={qualError} resumeAI={resumeAI} />
     </AppShell>
   );
 }

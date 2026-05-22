@@ -115,3 +115,10 @@ export async function runQualificationIntelligenceSelfTest() {
 
   await runPipelineExtractionSelfTests();
 }
+
+import { describe, it } from "vitest";
+describe("intelligence — buildFallbackIntelligence + pipeline extraction", () => {
+  it("génère une fiche intelligente complète sans appel LLM réel", async () => {
+    await runQualificationIntelligenceSelfTest();
+  });
+});

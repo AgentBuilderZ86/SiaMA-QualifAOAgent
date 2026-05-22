@@ -39,3 +39,10 @@ export function runNormalizeSelfTest() {
   assert(record.sourceUrl === fixture.sourceUrl, "L'URL source officielle doit être conservée.");
   assert(calculateDeadlineDays("2026-05-10", new Date("2026-05-07T12:00:00.000Z")) === 3, "Le délai doit être calculé en jours calendaires.");
 }
+
+import { describe, it } from "vitest";
+describe("normalize — pipeline de normalisation des AO collectés", () => {
+  it("normalise, déduplique et convertit un AO en record sans erreur", () => {
+    runNormalizeSelfTest();
+  });
+});

@@ -5,11 +5,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
-    exclude: [
-      "**/node_modules/**",
-      "**/src/lib/aoSources/normalize.test.ts",
-      "**/src/lib/qualification/intelligence.test.ts"
-    ]
+    exclude: ["**/node_modules/**"],
+    // Les tests normalize et intelligence font de la computation pure (pas de LLM réel).
+    // Timeout global augmenté pour les couvrir sans les exclure du CI.
+    testTimeout: 30_000
   },
   resolve: {
     alias: {
