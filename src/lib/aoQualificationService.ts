@@ -5,7 +5,7 @@ import {
   isServerlessRuntime,
   summarizeDocumentText
 } from "@/lib/documents";
-import { QUALIFICATION_BUDGET_MS } from "@/lib/constants";
+import { NETLIFY_MAX_DURATION_MS, QUALIFICATION_BUDGET_MS } from "@/lib/constants";
 import { extractKeyMetadata, isPlaceholderSection } from "@/lib/qualification/documentMetadata";
 import { filenameSignalsPrefix, parseFilenameSignals } from "@/lib/qualification/filenameSignals";
 import { generateQualificationRecommendation } from "@/lib/llm";
@@ -118,6 +118,7 @@ export async function saveQualification(
 
   // Chemin "analyze" : charge la fiche déjà extraite, court-circuite l'extraction documentaire
   if (pipelineStage === "analyze") {
+    const analyzeStartMs = Date.now();
     const ao = await aoRepository.findAo(aoNum);
     if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
     const existingFiche = parseQualificationFiche(ao.raw?.["Fiche qualification"]);
@@ -129,6 +130,18 @@ export async function saveQualification(
     const referentials = await aoRepository.readReferentials();
     const serverless = isServerlessRuntime();
     const { recommendation: recBudget, intelligence: intBudget } = QUALIFICATION_BUDGET_MS;
+
+    // Budget adaptatif : déduit le temps passé en lectures Sheets + réserve 12 s pour les écritures
+    const POST_LLM_RESERVE_MS = 12_000;
+    const elapsedBeforeLlm = Date.now() - analyzeStartMs;
+    const remainingForLlm = serverless
+      ? Math.max(0, NETLIFY_MAX_DURATION_MS - elapsedBeforeLlm - POST_LLM_RESERVE_MS)
+      : 0;
+    const adaptiveRecMs = serverless ? Math.min(recBudget.serverless, remainingForLlm) : recBudget.local;
+    const adaptiveIntMs = serverless
+      ? Math.min(intBudget.serverless, Math.max(0, remainingForLlm - adaptiveRecMs))
+      : intBudget.local;
+
     const fiche: QualificationFiche = { ...existingFiche };
     fiche.recommendation = await Promise.race([
       generateQualificationRecommendation(ao, fiche),
@@ -140,12 +153,12 @@ export async function saveQualification(
                 ? "Recommandation : basée sur l'extraction documentaire (IA tronquée — délai Netlify)."
                 : "Recommandation : analyse documentaire disponible."
             ),
-          serverless ? recBudget.serverless : recBudget.local
+          adaptiveRecMs
         )
       )
     ]);
     fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, false, {
-      llmTimeoutMs: serverless ? intBudget.serverless : intBudget.local
+      llmTimeoutMs: adaptiveIntMs
     });
     await aoRepository.upsertPipeline(ao, "BO", {
       "Fiche qualification": JSON.stringify(fiche),
