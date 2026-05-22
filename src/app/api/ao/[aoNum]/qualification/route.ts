@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { saveQualification } from "@/lib/ao";
 import { requireUser } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ aoN
         : typeof error === "string"
           ? error
           : "Erreur inconnue pendant la génération de la fiche.";
-    console.error("[api/qualification]", aoNum, message, error);
+    logger.error("api/qualification", message, { aoNum, error: String(error) });
     return NextResponse.json({ ok: false as const, error: message }, { status: 400 });
   }
 }
