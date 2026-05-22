@@ -161,8 +161,9 @@ export async function completeChat(options: CompleteChatOptions): Promise<string
 }
 
 /**
- * Extrait le texte d'un PDF scanné en l'envoyant à Claude (vision via document input).
- * Utilise claude-haiku (rapide et économique) — fonctionne même sans texte natif.
+ * Extrait les informations business clés d'un PDF scanné via Claude vision (document input).
+ * Fait extraction structurée directement depuis les images — évite OCR texte brut + pre-summary séparé.
+ * Utilise le modèle configuré (ANTHROPIC_MODEL) ou Sonnet par défaut pour meilleure précision sur AOs.
  * Retourne null si l'API Anthropic n'est pas configurée ou si l'extraction échoue.
  */
 export async function extractPdfTextVision(pdfBuffer: Buffer): Promise<string | null> {
@@ -170,6 +171,11 @@ export async function extractPdfTextVision(pdfBuffer: Buffer): Promise<string | 
   if (!apiKey) return null;
 
   const base64 = pdfBuffer.toString("base64");
+  // Use configured model or Sonnet for better precision on structured AO data
+  const model =
+    process.env.ANTHROPIC_MODEL?.trim() ||
+    process.env.LLM_MODEL?.trim() ||
+    "claude-sonnet-4-20250514";
 
   const response = await fetch(ANTHROPIC_URL, {
     method: "POST",
@@ -179,7 +185,7 @@ export async function extractPdfTextVision(pdfBuffer: Buffer): Promise<string | 
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model,
       max_tokens: 4096,
       messages: [
         {
@@ -191,7 +197,21 @@ export async function extractPdfTextVision(pdfBuffer: Buffer): Promise<string | 
             },
             {
               type: "text",
-              text: "Extrais le texte intégral de ce document d'appel d'offres. Retourne uniquement le texte brut extrait, sans commentaires ni reformulation. Préserve la structure : titres, articles, tableaux, montants."
+              text:
+                "Tu es expert en qualification d'appels d'offres publics. Ce document est un AO scanné.\n\n" +
+                "Extrais uniquement les informations suivantes si elles sont clairement présentes :\n" +
+                "1. Objet exact de la mission (1-2 phrases)\n" +
+                "2. Périmètre et livrables attendus\n" +
+                "3. Durée d'exécution\n" +
+                "4. Budget estimé ou montant indicatif\n" +
+                "5. Critères d'évaluation technique avec pondérations\n" +
+                "6. Profils requis (niveau, expérience, compétences clés)\n" +
+                "7. Références similaires exigées\n" +
+                "8. Date limite de remise des offres\n" +
+                "9. Lieu d'exécution / maître d'ouvrage\n" +
+                "10. Modalités de paiement et jalons financiers\n\n" +
+                "Pour chaque item absent du document : ne pas inventer, omettre simplement.\n" +
+                "Retourne le texte structuré, sans reformulation ni commentaire."
             }
           ]
         }
