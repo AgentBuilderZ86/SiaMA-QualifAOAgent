@@ -28,6 +28,7 @@ import { getSheetsConfigStatus } from "@/lib/google";
 import { readAoCache } from "@/lib/aoSources/cache";
 import { readAoDocumentCache } from "@/lib/aoSources/documentCache";
 import { generateIntelligentQualification } from "@/lib/qualification/intelligence";
+import { applyStructuredToFiche, buildStructuredQualification } from "@/lib/qualification/structuredQualification";
 import { operationalDeadlineSubset, urgentByDeadline } from "@/lib/aoDeadline";
 import type { SheetRow } from "@/lib/google";
 import {
@@ -232,8 +233,18 @@ function documentSeparator(document: Pick<QualificationDocumentExtraction, "kind
   return `--- Document ${document.kind} : ${document.name}${source} ---`;
 }
 
+const DOCUMENT_CORPUS_ORDER: Record<QualificationDocumentKind, number> = {
+  RC: 0,
+  Avis: 1,
+  CPS: 2,
+  Autre: 3
+};
+
 function joinQualificationDocuments(documents: QualificationDocumentExtraction[], manualExtract: string) {
-  const parts = documents
+  const ordered = [...documents].sort(
+    (a, b) => (DOCUMENT_CORPUS_ORDER[a.kind] ?? 9) - (DOCUMENT_CORPUS_ORDER[b.kind] ?? 9)
+  );
+  const parts = ordered
     .filter((document) => document.text.trim())
     .map((document) => `${documentSeparator(document)}\n${document.text.trim()}`);
   if (manualExtract.trim()) {
@@ -452,8 +463,8 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
   const pipelineNotes = (() => {
     const base = documentExtractionStatus(documents, manualExtract);
     const zipNote = zipMode
-      ? "Mode archive ZIP : extraction native prioritaire, OCR limité (2 fichiers), enrichWeb désactivé."
-      : "";
+      ? "Mode archive ZIP : extraction native prioritaire, OCR limité (priorité RC puis Avis), enrichWeb désactivé."
+      : "Priorité documentaire : RC puis Avis (OCR ciblé sur Netlify).";
     const enrichNote = zipMode && enrichWebRequested ? "Enrichissement web ignoré pour respecter le délai serveur." : "";
     const hint = meta.matchNotes[0];
     const merged = [base, zipNote, enrichNote, hint && base.length < 350 ? hint : ""].filter(Boolean).join(" · ");
@@ -487,6 +498,10 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
     filenameSignals: Object.keys(filenameSignals).length ? filenameSignals : undefined,
     extractionEvidence
   };
+  const structured = buildStructuredQualification(ao, fiche, referentials);
+  Object.assign(fiche, applyStructuredToFiche(fiche, structured));
+  fiche.analysisBrief = structured.briefForLlm;
+
   const serverless = isServerlessRuntime();
   const llmTimeoutMs = serverless ? 14_000 : zipMode ? 18_000 : 0;
   const recTimeoutMs = serverless ? 6_000 : zipMode ? 8_000 : 60_000;
@@ -515,7 +530,8 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
     )
   ]);
   fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, enrichWeb, {
-    llmTimeoutMs
+    llmTimeoutMs,
+    structured
   });
 
   await aoRepository.upsertPipeline(ao, "BO", {

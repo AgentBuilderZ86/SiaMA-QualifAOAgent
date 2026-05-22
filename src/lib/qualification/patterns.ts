@@ -134,6 +134,20 @@ export const GO_PATTERNS: GoPatternDefinition[] = [
     reason: "Pattern SI / Transformation digitale"
   },
   {
+    id: "urbanisation-si",
+    keywords: [
+      "urbanisation si",
+      "urbanisation des si",
+      "plan de transformation",
+      "architecture d'entreprise",
+      "togaf",
+      "cartographie des processus"
+    ],
+    score: 3,
+    manager: "ZRIOUIL ADIL",
+    reason: "Pattern SDSI — urbanisation SI / architecture d'entreprise"
+  },
+  {
     id: "capacity-building",
     keywords: [
       "renforcement des capacites",

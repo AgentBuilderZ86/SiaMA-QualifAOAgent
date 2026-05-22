@@ -305,6 +305,10 @@ export function buildQualificationFicheHtml(ao: AoRecord, intelligence: Intellig
   const watchpoints = intelligence.decisionWatchpoints || [];
   const finance = intelligence.financeIndicative;
   const nextSteps = intelligence.nextSteps || [];
+  const teamProfiles = intelligence.teamProfiles || [];
+  const evaluationCriteria = intelligence.evaluationCriteria || [];
+  const clientInsight = intelligence.clientInsight;
+  const risksList = intelligence.risks || [];
 
   const headerSubtitle = `${escapeHtml(ao.client || ident?.buyer || "Client")} · ${escapeHtml(ident?.geography || ao.country || "Périmètre à confirmer")}`;
   const headerMeta = [
@@ -421,7 +425,7 @@ export function buildQualificationFicheHtml(ao: AoRecord, intelligence: Intellig
               .map(
                 (row) => `
               <tr>
-                <td>${escapeHtml(row.phase)}</td>
+                <td>${escapeHtml(row.phase || "—")}</td>
                 <td>${escapeHtml(row.profil)}</td>
                 <td>${escapeHtml(row.jours)}</td>
                 <td>${escapeHtml(row.tjm)}</td>
@@ -493,7 +497,45 @@ export function buildQualificationFicheHtml(ao: AoRecord, intelligence: Intellig
     title: "Contexte et problématique client",
     body: `<p style="margin-bottom:12px">${escapeHtml(shortText(intelligence.clientContext, 480))}</p>${ctxBlock}`
   });
+  if (clientInsight) {
+    sections.push({
+      num: n++,
+      title: "Profil client & enjeux",
+      body: `<table><tbody>
+        <tr><td class="label">Profil</td><td>${escapeHtml(clientInsight.organizationType)}</td></tr>
+        <tr><td class="label">Missions</td><td>${escapeHtml(clientInsight.missions)}</td></tr>
+        <tr><td class="label">Contexte projet</td><td>${escapeHtml(clientInsight.projectContext)}</td></tr>
+        <tr><td class="label">Enjeux</td><td>${escapeHtml(clientInsight.stakes)}</td></tr>
+        <tr><td class="label">Relation Sia</td><td>${escapeHtml(clientInsight.relationSia)}</td></tr>
+      </tbody></table>`
+    });
+  }
   if (phases.length) sections.push({ num: n++, title: `Périmètre de la mission — ${phases.length} phases`, body: phasesBlock });
+  if (teamProfiles.length) {
+    sections.push({
+      num: n++,
+      title: "Équipe projet requise",
+      body: teamProfiles
+        .map(
+          (profile) => `
+        <div class="profil-card" style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px">
+          <strong>${escapeHtml(profile.title)}</strong>
+          <p style="margin:6px 0 0;color:var(--muted)">${escapeHtml(profile.requirements)}</p>
+          ${profile.certifications.map((cert) => `<span class="tag tag-blue" style="margin:2px 4px 2px 0">${escapeHtml(cert)}</span>`).join("")}
+        </div>`
+        )
+        .join("")
+    });
+  }
+  if (evaluationCriteria.length) {
+    sections.push({
+      num: n++,
+      title: "Critères d'évaluation",
+      body: `<table><tbody>${evaluationCriteria
+        .map((c) => `<tr><td class="label">${escapeHtml(c.label)}</td><td>${escapeHtml(c.detail)}</td></tr>`)
+        .join("")}</tbody></table>`
+    });
+  }
   if (keyQuestions.length) sections.push({ num: n++, title: "Questions clés à traiter dans l'offre", body: keyQuestionsBlock });
   if (calendar.length) sections.push({ num: n++, title: "Calendrier de l'appel d'offres", body: calendarHtml(calendar) });
   if (responseFormat) sections.push({ num: n++, title: "Format de réponse imposé", body: responseFormatHtml(responseFormat) });
@@ -503,6 +545,21 @@ export function buildQualificationFicheHtml(ao: AoRecord, intelligence: Intellig
     body: signalsBlock
   });
   if (manager) sections.push({ num: n++, title: "Manager recommandé", body: managerBlock });
+  if (risksList.length) {
+    sections.push({
+      num: n++,
+      title: "Risques & points de vigilance",
+      body: `<ul style="list-style:none;padding:0">${risksList
+        .map(
+          (risk) => `
+        <li style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--surface-1)">
+          <span class="tag ${risk.severity === "Élevé" ? "tag-warn" : risk.severity === "Faible" ? "tag-go" : "tag-blue"}">${escapeHtml(risk.severity)}</span>
+          <div><strong>${escapeHtml(risk.label)}</strong><p style="margin:4px 0 0;font-size:12px;color:var(--muted)">${escapeHtml(risk.mitigation)}</p></div>
+        </li>`
+        )
+        .join("")}</ul>`
+    });
+  }
   if (watchpoints.length) sections.push({ num: n++, title: "Points de vigilance & facteurs différenciants", body: watchpointsBlock });
   if (finance) sections.push({ num: n++, title: "Simulation financière indicative", body: financeBlock });
   if (nextSteps.length) sections.push({ num: n++, title: "Prochaines étapes recommandées", body: nextStepsBlock });

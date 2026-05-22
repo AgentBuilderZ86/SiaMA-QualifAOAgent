@@ -109,6 +109,8 @@ export type QualificationFiche = {
   /** Indices dérivés du nom de fichier uploadé (sans écraser client AO Sheet). */
   filenameSignals?: FilenameSignals;
   extractionEvidence?: QualificationExtractionEvidence;
+  /** Synthèse structurée pour l'IA (évite d'envoyer uniquement le brut OCR). */
+  analysisBrief?: string;
 };
 
 export type SourcedFact = {
@@ -217,6 +219,25 @@ export type QualificationMissionPhase = {
   deliverables: string[];
 };
 
+export type QualificationTeamProfile = {
+  title: string;
+  requirements: string;
+  certifications: string[];
+};
+
+export type QualificationEvaluationCriterion = {
+  label: string;
+  detail: string;
+};
+
+export type QualificationClientInsight = {
+  organizationType: string;
+  missions: string;
+  projectContext: string;
+  stakes: string;
+  relationSia: string;
+};
+
 export type QualificationSignal = {
   label: string;
   detail: string;
@@ -278,6 +299,9 @@ export type IntelligentQualificationFiche = {
   aoCalendar?: QualificationCalendarEntry[];
   responseFormat?: QualificationResponseFormat;
   financeIndicative?: QualificationFinanceIndicative;
+  teamProfiles?: QualificationTeamProfile[];
+  evaluationCriteria?: QualificationEvaluationCriterion[];
+  clientInsight?: QualificationClientInsight;
 };
 
 export type FinancialSimulation = {

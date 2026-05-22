@@ -57,9 +57,9 @@ export default async function QualificationPage({
       />
 
       <div className="alert" style={{ marginBottom: 16 }}>
-        Chargez l’avis, le CPS et le RC pour générer la fiche intelligente. Les champs ci-dessous restent optionnels et
-        permettent de compléter ou corriger l’extraction automatique. OCR open source (Tesseract) activé par défaut pour
-        PDF scannés et images dans les ZIP.
+        Chargez l’Avis et le RC en priorité (l’Avis seul ne couvre souvent que titre, montant et date ; le RC apporte
+        critères et périmètre). Le CPS est utile en complément. OCR open source (Tesseract) cible d’abord le RC scanné
+        sur Netlify.
       </div>
       {!sheetsStatus.configured ? (
         <div className="alert" role="status" style={{ marginBottom: 16 }}>
