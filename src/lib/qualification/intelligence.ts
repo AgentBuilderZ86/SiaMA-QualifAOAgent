@@ -25,6 +25,7 @@ import type { ReferentielItem } from "@/lib/aoTypes";
 import type { PatternScoreResult } from "@/lib/qualification/patterns";
 import { scoreAoFromPatterns } from "@/lib/qualification/patterns";
 import { researchQualificationContext } from "@/lib/qualification/research";
+import type { StructuredQualification } from "@/lib/qualification/structuredQualification";
 import { isServerlessRuntime } from "@/lib/documents";
 import { completeChat, hasConfiguredLlm } from "@/lib/llmChat";
 
@@ -143,7 +144,10 @@ function meaningful(value: string) {
 }
 
 function documentEvidence(fiche: QualificationFiche) {
-  return text(fiche.documentExtract || "Non trouvé dans le document.").slice(0, 6000);
+  if (fiche.analysisBrief?.trim()) return fiche.analysisBrief.trim().slice(0, 9000);
+  const raw = text(fiche.documentExtract || "Non trouvé dans le document.");
+  const serverless = isServerlessRuntime();
+  return raw.slice(0, serverless ? 8000 : 14000);
 }
 
 function documentSource(fiche: QualificationFiche) {
@@ -563,17 +567,58 @@ function fallbackNextSteps(ao: AoRecord): QualificationNextStep[] {
   ];
 }
 
+function mergeStructuredIntelligence(
+  base: IntelligentQualificationFiche,
+  structured: StructuredQualification
+): IntelligentQualificationFiche {
+  const prefer = (llm: string, structuredText: string) =>
+    meaningful(llm) && !llm.includes("à confirmer après lecture") && !llm.includes("à générer par LLM")
+      ? llm
+      : structuredText;
+
+  return {
+    ...base,
+    executiveSummary: prefer(base.executiveSummary, structured.executiveSummary),
+    clientContext: prefer(
+      base.clientContext,
+      `${structured.clientInsight.organizationType} — ${structured.clientInsight.missions}. ${structured.clientInsight.projectContext}`
+    ),
+    businessIssues: base.businessIssues.some((i) => !/à confirmer|à générer/i.test(i))
+      ? base.businessIssues
+      : structured.businessIssues,
+    scopeSynthesis: prefer(base.scopeSynthesis, structured.scopeSynthesis),
+    missionPhases: structured.missionPhases.length ? structured.missionPhases : base.missionPhases,
+    requiredProfile: structured.requiredProfileLines.length ? structured.requiredProfileLines : base.requiredProfile,
+    teamProfiles: structured.teamProfiles,
+    evaluationCriteria: structured.evaluationCriteria,
+    clientInsight: structured.clientInsight,
+    financeIndicative: structured.financeIndicative.rows.length ? structured.financeIndicative : base.financeIndicative,
+    nextSteps: structured.actionPlan.length ? structured.actionPlan : base.nextSteps,
+    risks: structured.risks.length ? structured.risks : base.risks,
+    identification: { ...structured.identification, ...base.identification, buyer: prefer(base.identification?.buyer || "", structured.identification.buyer) || structured.identification.buyer },
+    contextHighlight: {
+      problems: base.contextHighlight?.problems?.length
+        ? base.contextHighlight.problems
+        : structured.risks.map((r) => r.label).slice(0, 4),
+      objectives: base.contextHighlight?.objectives?.length
+        ? base.contextHighlight.objectives
+        : structured.businessIssues.slice(0, 4),
+      keyPoint: prefer(base.contextHighlight?.keyPoint || "", structured.clientInsight.stakes)
+    }
+  };
+}
+
 export function buildFallbackIntelligence(
   ao: AoRecord,
   fiche: QualificationFiche,
   sources: SourcedFact[],
   assumptions: string[] = [],
-  options: { patternScore?: PatternScoreResult; referentials?: ReferentielItem[] } = {}
+  options: { patternScore?: PatternScoreResult; referentials?: ReferentielItem[]; structured?: StructuredQualification } = {}
 ): IntelligentQualificationFiche {
   const scoreBreakdown = fallbackScoreBreakdown(fiche);
   const goNoGoScore = Math.round(scoreBreakdown.reduce((sum, item) => sum + item.score, 0) / scoreBreakdown.length);
   const recommendation = recommendationFromScore(goNoGoScore);
-  const risks = fallbackRisks(fiche);
+  const risksFallback = fallbackRisks(fiche);
   const businessIssues = fallbackBusinessIssues(fiche);
   const winThemes = fallbackWinThemes(fiche);
   const clarificationQuestions = fallbackClarificationQuestions(fiche);
@@ -608,8 +653,11 @@ export function buildFallbackIntelligence(
       });
     });
   }
+  const structured = options.structured;
   const base = {
-    executiveSummary: compactSentence(`L'opportunité ${ao.displayAoNum || ao.aoNum} pour ${ao.client} porte sur ${ao.sujet}. La qualification s'appuie sur l'extrait documentaire ${documentSource(fiche)} ; les informations non présentes dans ce document restent à confirmer.`),
+    executiveSummary: structured
+      ? structured.executiveSummary
+      : compactSentence(`L'opportunité ${ao.displayAoNum || ao.aoNum} pour ${ao.client} porte sur ${ao.sujet}. La qualification s'appuie sur l'extrait documentaire ${documentSource(fiche)} ; les informations non présentes dans ce document restent à confirmer.`),
     clientContext: compactSentence(meaningful(fiche.contexte) ? fiche.contexte : `Contexte client non trouvé explicitement dans ${documentSource(fiche)}.`),
     businessIssues: businessIssues.length ? businessIssues : ["Enjeux métier à générer par LLM après lecture du document chargé."],
     scopeSynthesis: compactSentence(meaningful(fiche.perimetre) ? fiche.perimetre : `Périmètre non trouvé explicitement dans ${documentSource(fiche)}.`),
@@ -618,7 +666,7 @@ export function buildFallbackIntelligence(
     scoreBreakdown,
     recommendation,
     confidenceLevel: sources.length > 2 ? ("Moyen" as const) : ("Faible" as const),
-    risks,
+    risks: options.structured?.risks.length ? options.structured.risks : risksFallback,
     clarificationQuestions,
     responseStrategy: "Clarifier les points bloquants, confirmer le budget/planning, puis construire une réponse centrée sur les preuves d'exécution.",
     differentiators: ["Approche structurée", "Mobilisation d'expertises ciblées", "Traçabilité des hypothèses et sources"],
@@ -626,21 +674,36 @@ export function buildFallbackIntelligence(
     sources,
     assumptions,
     generatedAt: new Date().toISOString(),
-    identification: fallbackIdentification(ao, fiche),
-    missionPhases: fallbackMissionPhases(fiche),
+    identification: structured?.identification || fallbackIdentification(ao, fiche),
+    missionPhases: structured?.missionPhases.length ? structured.missionPhases : fallbackMissionPhases(fiche),
     expectedDeliverables: [fiche.livrables || "Livrables à confirmer"],
-    requiredProfile: [fiche.profils || "Profils requis à confirmer", fiche.criteres || "Critères de qualification à confirmer"],
+    requiredProfile: structured?.requiredProfileLines.length
+      ? structured.requiredProfileLines
+      : [fiche.profils || "Profils requis à confirmer", fiche.criteres || "Critères de qualification à confirmer"],
+    teamProfiles: structured?.teamProfiles,
+    evaluationCriteria: structured?.evaluationCriteria,
+    clientInsight: structured?.clientInsight,
     qualificationSignals: signals,
     managerRecommendation,
     decisionWatchpoints: fallbackWatchpoints(ao, fiche),
-    nextSteps: fallbackNextSteps(ao),
+    nextSteps: structured?.actionPlan.length ? structured.actionPlan : fallbackNextSteps(ao),
     patternScore,
     contextHighlight: fallbackContextHighlight(fiche),
     keyQuestions: fallbackKeyQuestions(fiche),
     aoCalendar: fallbackCalendar(ao),
     responseFormat: fallbackResponseFormat(fiche),
-    financeIndicative: fallbackFinanceIndicative(ao, fiche, options.referentials || [])
+    financeIndicative: structured?.financeIndicative || fallbackFinanceIndicative(ao, fiche, options.referentials || [])
   };
+  if (structured) {
+    base.clientContext = `${structured.clientInsight.organizationType} — ${structured.clientInsight.missions}. ${structured.clientInsight.projectContext}`;
+    if (!base.businessIssues.some((i) => !/à confirmer|à générer/i.test(i))) base.businessIssues = structured.businessIssues;
+    base.scopeSynthesis = structured.scopeSynthesis;
+    base.contextHighlight = {
+      problems: structured.risks.map((r) => r.label).slice(0, 5),
+      objectives: structured.businessIssues.slice(0, 5),
+      keyPoint: structured.clientInsight.stakes
+    };
+  }
   return { ...base, pptCopyBlock: buildPptCopyBlock(base) };
 }
 
@@ -813,7 +876,7 @@ function normalizeIntelligence(
   raw: Record<string, unknown> | null,
   sources: SourcedFact[],
   assumptions: string[],
-  options: { patternScore?: PatternScoreResult; referentials?: ReferentielItem[] } = {}
+  options: { patternScore?: PatternScoreResult; referentials?: ReferentielItem[]; structured?: StructuredQualification } = {}
 ): IntelligentQualificationFiche {
   const fallback = buildFallbackIntelligence(ao, fiche, sources, assumptions, options);
   if (!raw) return fallback;
@@ -885,7 +948,30 @@ function normalizeIntelligence(
     keyQuestions: normalizeKeyQuestions(raw.keyQuestions, fallback.keyQuestions || fallbackKeyQuestions(fiche)),
     aoCalendar: normalizeCalendar(raw.aoCalendar, fallback.aoCalendar || fallbackCalendar(ao)),
     responseFormat: normalizeResponseFormat(raw.responseFormat, fallback.responseFormat || fallbackResponseFormat(fiche)),
-    financeIndicative: normalizeFinanceIndicative(raw.financeIndicative, fallback.financeIndicative || fallbackFinanceIndicative(ao, fiche, options.referentials || []))
+    financeIndicative: normalizeFinanceIndicative(raw.financeIndicative, fallback.financeIndicative || fallbackFinanceIndicative(ao, fiche, options.referentials || [])),
+    teamProfiles: arrayOfRecords(raw.teamProfiles).length
+      ? arrayOfRecords(raw.teamProfiles).map((record) => ({
+          title: text(record.title),
+          requirements: text(record.requirements),
+          certifications: arrayOfStrings(record.certifications, [])
+        }))
+      : fallback.teamProfiles,
+    evaluationCriteria: arrayOfRecords(raw.evaluationCriteria).length
+      ? arrayOfRecords(raw.evaluationCriteria).map((record) => ({
+          label: text(record.label),
+          detail: text(record.detail)
+        }))
+      : fallback.evaluationCriteria,
+    clientInsight:
+      raw.clientInsight && typeof raw.clientInsight === "object" && !Array.isArray(raw.clientInsight)
+        ? {
+            organizationType: text((raw.clientInsight as Record<string, unknown>).organizationType, fallback.clientInsight?.organizationType || ""),
+            missions: text((raw.clientInsight as Record<string, unknown>).missions, fallback.clientInsight?.missions || ""),
+            projectContext: text((raw.clientInsight as Record<string, unknown>).projectContext, fallback.clientInsight?.projectContext || ""),
+            stakes: text((raw.clientInsight as Record<string, unknown>).stakes, fallback.clientInsight?.stakes || ""),
+            relationSia: text((raw.clientInsight as Record<string, unknown>).relationSia, fallback.clientInsight?.relationSia || "")
+          }
+        : fallback.clientInsight
   };
   if (options.patternScore && options.patternScore.recommendedManager && (!base.managerRecommendation.primaryManager || base.managerRecommendation.primaryManager === "À confirmer")) {
     base.managerRecommendation = {
@@ -894,7 +980,8 @@ function normalizeIntelligence(
       decisionOwner: options.patternScore.recommendedManager.name
     };
   }
-  return { ...base, pptCopyBlock: text(raw.pptCopyBlock, buildPptCopyBlock(base)) };
+  const normalized = { ...base, pptCopyBlock: text(raw.pptCopyBlock, buildPptCopyBlock(base)) };
+  return options.structured ? mergeStructuredIntelligence(normalized, options.structured) : normalized;
 }
 
 async function callQualificationLlm(
@@ -907,12 +994,13 @@ async function callQualificationLlm(
   if (!hasConfiguredLlm()) return null;
 
   const system = [
-            "Tu es un directeur de mission conseil senior chez Sia Partners Maroc.",
-            "Tu produis une fiche de qualification opérationnelle V8 pour comité GO/WATCH/NO GO, au niveau d'une note manager exploitable.",
-            "Le contenu doit être riche, spécifique au dossier, orienté décision et préparation de réponse.",
-            "Structure l'analyse comme une fiche AO complète : identification, contexte, périmètre/phases, livrables, profil requis, signaux, manager recommandé, points de vigilance, prochaines étapes.",
-            "Règle prioritaire : clientContext, scopeSynthesis, businessIssues, winThemes, risks et clarificationQuestions doivent être générés par ton analyse du document chargé.",
-            "Ne recopie pas mécaniquement les champs extractifs ; reformule-les en analyse métier exploitable et rattache chaque point au document chargé quand l'information y est présente.",
+            "Tu es SiaGPT, agent de qualification AO de Sia Partners Maroc (practice TEC).",
+            "Tu produis une fiche de qualification structurée pour comité GO/WATCH/NO GO — même niveau qu'une analyse manager complète (identification, scoring patterns, phases, équipe, critères, finance, risques, plan d'action).",
+            "Pipeline obligatoire : (1) lire documentAnalysis et structuredBrief, (2) compléter/affiner l'identification, (3) intégrer patternScoring, (4) structurer phases P1..Pn, profils avec certifications, critères d'évaluation chiffrés, (5) simulation TJM, (6) calendrier J-20..dépôt, (7) synthèse décisionnelle.",
+            "Interdit : coller un bloc de texte OCR brut dans executiveSummary, clientContext ou scopeSynthesis. Chaque champ doit être une analyse courte, structurée, en français professionnel.",
+            "L'Avis seul est insuffisant : prioriser RC puis Avis pour critères, périmètre, profils et barème.",
+            "Règle prioritaire : clientContext, scopeSynthesis, businessIssues, winThemes, risks, missionPhases, requiredProfile, teamProfiles, evaluationCriteria et clarificationQuestions doivent refléter le dossier chargé.",
+            "Ne recopie pas mécaniquement le documentExtract ; reformule en bullets exploitables. Si une info manque : « À confirmer » ou « NC — voir RC ».",
             "Les sources web et référentiels servent uniquement à enrichir ou challenger l'analyse documentaire, jamais à remplacer le document chargé.",
             "N'invente aucun chiffre, fait, référence ou concurrent.",
             "Les dates, budgets, volumes JH, TJM et scores doivent venir des données fournies, des référentiels transmis, ou être marqués À confirmer / indicatif.",
@@ -985,9 +1073,19 @@ async function callQualificationLlm(
                 fees: "string DH",
                 totalWithFees: "string DH HT",
                 note: "string"
+              },
+              teamProfiles: [{ title: "string", requirements: "string", certifications: ["string"] }],
+              evaluationCriteria: [{ label: "string", detail: "string" }],
+              clientInsight: {
+                organizationType: "string",
+                missions: "string",
+                projectContext: "string",
+                stakes: "string",
+                relationSia: "string"
               }
             },
             ao,
+            structuredBrief: fiche.analysisBrief || "Non fourni",
             documentAnalysis: {
               documentName: fiche.documentName || "Aucun document nommé",
               extractionStatus: fiche.extractionStatus,
@@ -1052,10 +1150,16 @@ export async function generateIntelligentQualification(
   fiche: QualificationFiche,
   referentials: ReferentielItem[],
   enrichWeb: boolean,
-  options: { llmTimeoutMs?: number } = {}
+  options: { llmTimeoutMs?: number; structured?: StructuredQualification } = {}
 ): Promise<IntelligentQualificationFiche> {
+  const structured =
+    options.structured ||
+    (await import("@/lib/qualification/structuredQualification")).buildStructuredQualification(ao, fiche, referentials);
   const sources = await researchQualificationContext(ao, enrichWeb);
-  const patternScore = scoreAoFromPatterns(`${fiche.documentExtract || ""}\n${fiche.objet || ""}\n${fiche.perimetre || ""}\n${fiche.livrables || ""}\n${fiche.criteres || ""}`, ao.client || "");
+  const patternScore = scoreAoFromPatterns(
+    `${structured.briefForLlm}\n${fiche.documentExtract || ""}\n${fiche.objet || ""}\n${fiche.perimetre || ""}`,
+    ao.client || ""
+  );
   const assumptions = [
     enrichWeb ? "" : "Enrichissement web non demandé lors de la génération.",
     sources.length ? "" : "Aucune source externe fiable n'a été trouvée automatiquement.",
@@ -1074,5 +1178,5 @@ export async function generateIntelligentQualification(
     raw = await callQualificationLlm(ao, fiche, sources, referentials, patternScore).catch(() => null);
   }
 
-  return normalizeIntelligence(ao, fiche, raw, sources, assumptions, { patternScore, referentials });
+  return normalizeIntelligence(ao, fiche, raw, sources, assumptions, { patternScore, referentials, structured });
 }

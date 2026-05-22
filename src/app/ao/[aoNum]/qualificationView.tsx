@@ -224,6 +224,10 @@ export function QualificationIntelligenceView({
   const watchpoints = intelligence.decisionWatchpoints || [];
   const finance = intelligence.financeIndicative;
   const nextSteps = intelligence.nextSteps || [];
+  const teamProfiles = intelligence.teamProfiles || [];
+  const evaluationCriteria = intelligence.evaluationCriteria || [];
+  const clientInsight = intelligence.clientInsight;
+  const risksList = intelligence.risks || [];
 
   return (
     <div className="fiche-optorg">
@@ -348,6 +352,26 @@ export function QualificationIntelligenceView({
           </div>
         </section>
 
+        {clientInsight ? (
+          <section className="fiche-section">
+            <div className="fiche-section-header">
+              <div className="section-num">2b</div>
+              <div className="section-title">Profil client &amp; enjeux</div>
+            </div>
+            <div className="fiche-section-body">
+              <table className="fiche-table">
+                <tbody>
+                  <tr><td className="label">Profil</td><td>{clientInsight.organizationType}</td></tr>
+                  <tr><td className="label">Missions</td><td>{clientInsight.missions}</td></tr>
+                  <tr><td className="label">Contexte projet</td><td>{clientInsight.projectContext}</td></tr>
+                  <tr><td className="label">Enjeux</td><td>{clientInsight.stakes}</td></tr>
+                  <tr><td className="label">Relation Sia</td><td>{clientInsight.relationSia}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
         {phases.length ? (
           <section className="fiche-section">
             <div className="fiche-section-header">
@@ -367,6 +391,53 @@ export function QualificationIntelligenceView({
               <div className="alert-box alert-go">
                 <strong>Synthèse périmètre :</strong> {shortText(intelligence.scopeSynthesis, 360)}
               </div>
+            </div>
+          </section>
+        ) : null}
+
+        {teamProfiles.length ? (
+          <section className="fiche-section">
+            <div className="fiche-section-header">
+              <div className="section-num">3b</div>
+              <div className="section-title">Équipe projet requise</div>
+            </div>
+            <div className="fiche-section-body">
+              {teamProfiles.map((profile) => (
+                <div key={profile.title} className="profil-card" style={{ border: "1px solid var(--fiche-border)", borderRadius: 8, padding: "10px 12px", marginBottom: 8, fontSize: 13 }}>
+                  <strong>{profile.title}</strong>
+                  <p style={{ margin: "6px 0 0", color: "var(--fiche-muted)" }}>{profile.requirements}</p>
+                  {profile.certifications.length ? (
+                    <p style={{ marginTop: 8 }}>
+                      {profile.certifications.map((cert) => (
+                        <span key={cert} className="tag tag-blue" style={{ marginRight: 6 }}>
+                          {cert}
+                        </span>
+                      ))}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {evaluationCriteria.length ? (
+          <section className="fiche-section">
+            <div className="fiche-section-header">
+              <div className="section-num">3c</div>
+              <div className="section-title">Critères d&apos;évaluation</div>
+            </div>
+            <div className="fiche-section-body">
+              <table className="fiche-table">
+                <tbody>
+                  {evaluationCriteria.map((criterion) => (
+                    <tr key={criterion.label}>
+                      <td className="label">{criterion.label}</td>
+                      <td>{criterion.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
         ) : null}
@@ -475,6 +546,35 @@ export function QualificationIntelligenceView({
           </section>
         ) : null}
 
+        {risksList.length ? (
+          <section className="fiche-section">
+            <div className="fiche-section-header">
+              <div className="section-num">8b</div>
+              <div className="section-title">Risques &amp; points de vigilance</div>
+            </div>
+            <div className="fiche-section-body">
+              <ul className="ctx-list" style={{ listStyle: "none", padding: 0 }}>
+                {risksList.map((risk) => (
+                  <li key={risk.label} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--fiche-border, #eee)" }}>
+                    <span
+                      className={`tag ${
+                        risk.severity === "Élevé" ? "tag-warn" : risk.severity === "Faible" ? "tag-go" : "tag-blue"
+                      }`}
+                      style={{ flexShrink: 0, height: "fit-content" }}
+                    >
+                      {risk.severity}
+                    </span>
+                    <div>
+                      <strong>{risk.label}</strong>
+                      <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--fiche-muted)" }}>{risk.mitigation}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        ) : null}
+
         {watchpoints.length ? (
           <section className="fiche-section">
             <div className="fiche-section-header">
@@ -537,8 +637,8 @@ export function QualificationIntelligenceView({
                 </thead>
                 <tbody>
                   {finance.rows.map((row) => (
-                    <tr key={row.phase}>
-                      <td>{row.phase}</td>
+                    <tr key={`${row.phase}-${row.profil}`}>
+                      <td>{row.phase || "—"}</td>
                       <td>{row.profil}</td>
                       <td>{row.jours}</td>
                       <td>{row.tjm}</td>

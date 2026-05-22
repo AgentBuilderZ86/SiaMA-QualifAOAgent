@@ -28,6 +28,7 @@ import { getSheetsConfigStatus } from "@/lib/google";
 import { readAoCache } from "@/lib/aoSources/cache";
 import { readAoDocumentCache } from "@/lib/aoSources/documentCache";
 import { generateIntelligentQualification } from "@/lib/qualification/intelligence";
+import { applyStructuredToFiche, buildStructuredQualification } from "@/lib/qualification/structuredQualification";
 import { operationalDeadlineSubset, urgentByDeadline } from "@/lib/aoDeadline";
 import type { SheetRow } from "@/lib/google";
 import {
@@ -497,6 +498,10 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
     filenameSignals: Object.keys(filenameSignals).length ? filenameSignals : undefined,
     extractionEvidence
   };
+  const structured = buildStructuredQualification(ao, fiche, referentials);
+  Object.assign(fiche, applyStructuredToFiche(fiche, structured));
+  fiche.analysisBrief = structured.briefForLlm;
+
   const serverless = isServerlessRuntime();
   const llmTimeoutMs = serverless ? 14_000 : zipMode ? 18_000 : 0;
   const recTimeoutMs = serverless ? 6_000 : zipMode ? 8_000 : 60_000;
@@ -525,7 +530,8 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
     )
   ]);
   fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, enrichWeb, {
-    llmTimeoutMs
+    llmTimeoutMs,
+    structured
   });
 
   await aoRepository.upsertPipeline(ao, "BO", {
