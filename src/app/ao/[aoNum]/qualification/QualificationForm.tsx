@@ -22,6 +22,7 @@ const documentFields = [
 
 type ApiQualificationResponse =
   | { ok: true; redirectTo: string }
+  | { ok: true; nextStage: "analyze" }
   | { ok: false; error: string };
 
 const PIPELINE_STAGES = [
@@ -44,13 +45,13 @@ function stageProgressPercent(index: number) {
   return Math.round((stageCumulativeMs(index) / TOTAL_DURATION_MS) * 100);
 }
 
-function useProgressState(pending: boolean) {
-  const [stageIndex, setStageIndex] = useState(0);
+function useProgressState(pending: boolean, startIndex = 0) {
+  const [stageIndex, setStageIndex] = useState(startIndex);
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     if (!pending) {
-      setStageIndex(0);
+      setStageIndex(startIndex);
       setElapsed(0);
       return;
     }
@@ -62,7 +63,7 @@ function useProgressState(pending: boolean) {
 
     const stageTimers: ReturnType<typeof setTimeout>[] = [];
     let cumulativeMs = 0;
-    for (let i = 0; i < PIPELINE_STAGES.length - 1; i++) {
+    for (let i = startIndex; i < PIPELINE_STAGES.length - 1; i++) {
       cumulativeMs += STAGE_DURATIONS_MS[i] ?? 4_000;
       const capture = i + 1;
       stageTimers.push(setTimeout(() => setStageIndex(capture), cumulativeMs));
@@ -72,7 +73,7 @@ function useProgressState(pending: boolean) {
       clearInterval(elapsedTimer);
       stageTimers.forEach(clearTimeout);
     };
-  }, [pending]);
+  }, [pending, startIndex]);
 
   return {
     stage: pending ? (PIPELINE_STAGES[stageIndex] ?? PIPELINE_STAGES[0]) : null,
@@ -86,6 +87,27 @@ function errorKind(msg: string): "timeout" | "auth" | "empty" | "generic" {
   if (msg.includes("session") || msg.includes("connexion") || msg.includes("401")) return "auth";
   if (msg.includes("Ajoutez au moins un document") || msg.includes("corpus")) return "empty";
   return "generic";
+}
+
+async function callQualificationApi(aoNum: string, body: FormData): Promise<ApiQualificationResponse> {
+  const response = await fetch(`/api/ao/${encodeURIComponent(aoNum)}/qualification`, {
+    method: "POST",
+    body,
+    credentials: "include"
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    if (response.status === 504 || response.status === 502) {
+      return {
+        ok: false,
+        error: "Délai serveur Netlify dépassé (~60 s). L'extraction documentaire a été sauvegardée. Utilisez « Relancer l'analyse IA » pour compléter sans re-uploader vos documents."
+      };
+    }
+    return { ok: false, error: `Réponse serveur inattendue (HTTP ${response.status}).` };
+  }
+
+  return response.json() as Promise<ApiQualificationResponse>;
 }
 
 export function QualificationForm({
@@ -103,8 +125,9 @@ export function QualificationForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(initialError);
   const [partialSave, setPartialSave] = useState(false);
+  const [analyzePhase, setAnalyzePhase] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
-  const { stage: currentStage, percent, elapsed } = useProgressState(pending);
+  const { stage: currentStage, percent, elapsed } = useProgressState(pending, analyzePhase ? 2 : 0);
 
   // Nettoie ?qualError= et ?resumeAI= de l'URL dès l'affichage (URL propre)
   useEffect(() => {
@@ -117,63 +140,72 @@ export function QualificationForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // En mode resumeAI, soumet automatiquement avec forceDocumentExtraction désactivé
+  // En mode resumeAI, déclenche directement l'étape analyze (sans re-extraire les fichiers)
   const hasAutoSubmitted = useRef(false);
   useEffect(() => {
-    if (!resumeAI || hasAutoSubmitted.current || !formRef.current) return;
+    if (!resumeAI || hasAutoSubmitted.current) return;
     hasAutoSubmitted.current = true;
-    const cb = formRef.current.elements.namedItem("forceDocumentExtraction") as HTMLInputElement | null;
-    if (cb) cb.checked = false;
-    formRef.current.requestSubmit();
+    void runAnalyzeOnly();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeAI]);
+
+  async function runAnalyzeOnly() {
+    setPending(true);
+    setError("");
+    setPartialSave(false);
+    setAnalyzePhase(true);
+    const d = new FormData();
+    d.set("aoNum", aoNum);
+    d.set("pipelineStage", "analyze");
+    const result = await callQualificationApi(aoNum, d);
+    setPending(false);
+    if (!result.ok) { setError(result.error); return; }
+    if ("redirectTo" in result) { router.replace(result.redirectTo); router.refresh(); }
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     setError("");
     setPartialSave(false);
+    setAnalyzePhase(false);
 
-    const form = event.currentTarget;
-    const formData = new FormData(form);
+    const formData = new FormData(event.currentTarget);
     formData.set("aoNum", aoNum);
+    formData.set("pipelineStage", "extract");
 
     try {
-      const response = await fetch(`/api/ao/${encodeURIComponent(aoNum)}/qualification`, {
-        method: "POST",
-        body: formData,
-        credentials: "include"
-      });
-
-      const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        if (response.status === 504 || response.status === 502) {
-          setPartialSave(true);
-          setError(
-            "Délai serveur Netlify dépassé (~60 s). L’extraction documentaire a été sauvegardée avant le timeout : rechargez la fiche AO pour voir la fiche partielle. Relancez avec un seul document (Avis) pour obtenir l’analyse IA complète."
-          );
-        } else {
-          setError(`Réponse serveur inattendue (HTTP ${response.status}).`);
-        }
+      // Étape 1 : extraction documentaire (~15-25 s)
+      const r1 = await callQualificationApi(aoNum, formData);
+      if (!r1.ok) {
+        setPartialSave(true);
+        setError(r1.error);
+        setPending(false);
         return;
       }
 
-      const payload = (await response.json()) as ApiQualificationResponse;
-      if (!payload.ok) {
-        setError(payload.error || "Échec de la génération.");
+      if ("nextStage" in r1) {
+        // Étape 2 : analyse IA (~35-40 s) — aucun fichier requis
+        setAnalyzePhase(true);
+        const d2 = new FormData();
+        d2.set("aoNum", aoNum);
+        d2.set("pipelineStage", "analyze");
+        const r2 = await callQualificationApi(aoNum, d2);
+        setPending(false);
+        if (!r2.ok) { setError(r2.error); return; }
+        if ("redirectTo" in r2) { router.replace(r2.redirectTo); router.refresh(); }
         return;
       }
 
-      router.replace(payload.redirectTo);
-      router.refresh();
+      setPending(false);
+      if ("redirectTo" in r1) { router.replace(r1.redirectTo); router.refresh(); }
     } catch (cause) {
+      setPending(false);
       setError(
         cause instanceof Error
           ? cause.message
           : "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
       );
-    } finally {
-      setPending(false);
     }
   }
 
@@ -195,15 +227,10 @@ export function QualificationForm({
                 onClick={() => {
                   setError("");
                   setPartialSave(false);
-                  // Décoche forceDocumentExtraction pour ne relancer que le LLM
-                  if (formRef.current) {
-                    const cb = formRef.current.elements.namedItem("forceDocumentExtraction") as HTMLInputElement | null;
-                    if (cb) cb.checked = false;
-                  }
-                  formRef.current?.requestSubmit();
+                  void runAnalyzeOnly();
                 }}
               >
-                Relancer l’analyse IA (documents déjà sauvegardés)
+                Relancer l'analyse IA (documents déjà sauvegardés)
               </button>
               <button type="button" className="btn btn--ghost" onClick={() => { setError(""); setPartialSave(false); }}>
                 Réessayer depuis le début
@@ -226,14 +253,17 @@ export function QualificationForm({
       <div className="qualification-progress" role="status" aria-live="polite">
         {currentStage ? (
           <>
-            <strong>Génération en cours… {elapsed > 0 ? `(${elapsed} s)` : ""}</strong>
-            <span>{currentStage} Ne fermez pas l’onglet.</span>
+            <strong>
+              {analyzePhase ? "Étape 2/2 — Analyse IA…" : "Étape 1/2 — Extraction…"}
+              {elapsed > 0 ? ` (${elapsed} s)` : ""}
+            </strong>
+            <span>{currentStage} Ne fermez pas l'onglet.</span>
             <progress value={percent} max={100} style={{ width: "100%", marginTop: 6, height: 6 }} />
           </>
         ) : (
           <>
             <strong>Dossier documentaire AO</strong>
-            <span>Déposez l’avis, le CPS et le RC, ou un ZIP complet. Sur ZIP : extraction rapide + OCR limité (priorité avis/CPS/RC).</span>
+            <span>Déposez l'avis, le CPS et le RC, ou un ZIP complet. Sur ZIP : extraction rapide + OCR limité (priorité avis/CPS/RC).</span>
           </>
         )}
       </div>
@@ -256,7 +286,7 @@ export function QualificationForm({
               accept=".pdf,.doc,.docx,.txt,.zip,.png,.jpg,.jpeg,.tif,.tiff"
               multiple
             />
-            <span className="muted t-meta">BPU, acte d’engagement, annexes, zip complet (max 25 Mo).</span>
+            <span className="muted t-meta">BPU, acte d'engagement, annexes, zip complet (max 25 Mo).</span>
           </div>
         </div>
 
@@ -281,7 +311,7 @@ export function QualificationForm({
             id="documentExtract"
             name="documentExtract"
             rows={5}
-            placeholder="Collez ici un extrait fiable si l’OCR ne suffit pas."
+            placeholder="Collez ici un extrait fiable si l'OCR ne suffit pas."
           />
         </div>
 

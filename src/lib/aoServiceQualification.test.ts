@@ -101,7 +101,8 @@ describe("aoService saveQualification", () => {
     formData.append("documentCps", new File(["CPS : cadrage, architecture cible et schéma directeur."], "cps.txt", { type: "text/plain" }));
     formData.append("documentRc", new File(["RC : notation technique et dossier administratif."], "rc.txt", { type: "text/plain" }));
 
-    const fiche = await saveQualification("AO-1", "manager@siapartners.com", formData);
+    const result = await saveQualification("AO-1", "manager@siapartners.com", formData);
+    const fiche = "extractOnly" in result ? result.fiche : result;
 
     expect(fiche.documents).toHaveLength(4);
     expect(fiche.documents?.map((document) => document.kind)).toEqual(["Avis", "CPS", "RC", "RC"]);
@@ -168,7 +169,8 @@ describe("aoService saveQualification", () => {
       new File(["%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"], "avis.pdf", { type: "application/pdf" })
     );
 
-    const fiche = await saveQualification("AO-1", "manager@siapartners.com", formData);
+    const result = await saveQualification("AO-1", "manager@siapartners.com", formData);
+    const fiche = "extractOnly" in result ? result.fiche : result;
 
     expect(fiche).toBeDefined();
     expect(repo.upsertPipeline).toHaveBeenCalled();
@@ -209,7 +211,8 @@ describe("aoService saveQualification", () => {
     const formData = new FormData();
     formData.set("forceDocumentExtraction", "no");
 
-    const fiche = await saveQualification("AO-1", "manager@siapartners.com", formData);
+    const result = await saveQualification("AO-1", "manager@siapartners.com", formData);
+    const fiche = "extractOnly" in result ? result.fiche : result;
 
     expect(fiche.documentName).toBe("ancien-rc.pdf");
     expect(fiche.documentExtract).toContain("Ancien extrait documentaire fiable");

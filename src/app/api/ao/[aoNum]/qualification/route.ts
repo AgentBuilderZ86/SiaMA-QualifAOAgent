@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ aoN
     const formData = await request.formData();
     formData.set("aoNum", aoNum);
 
-    await saveQualification(aoNum, actor, formData);
+    const result = await saveQualification(aoNum, actor, formData);
 
     const aoPath = pathFor(aoNum);
     const qualificationPath = `${aoPath}/qualification`;
@@ -29,6 +29,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ aoN
     revalidatePath(aoPath);
     revalidatePath(qualificationPath);
 
+    if (typeof result === "object" && "extractOnly" in result) {
+      return NextResponse.json({ ok: true as const, nextStage: "analyze" as const });
+    }
     return NextResponse.json({ ok: true as const, redirectTo: aoPath });
   } catch (error) {
     const message =

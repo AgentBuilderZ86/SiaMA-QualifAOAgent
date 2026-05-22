@@ -107,7 +107,61 @@ function documentExtractionStatus(
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
-export async function saveQualification(aoNum: string, actor: string, formData: FormData) {
+export type SaveQualificationResult = QualificationFiche | { fiche: QualificationFiche; extractOnly: true };
+
+export async function saveQualification(
+  aoNum: string,
+  actor: string,
+  formData: FormData
+): Promise<SaveQualificationResult> {
+  const pipelineStage = (formData.get("pipelineStage") as string) || "full";
+
+  // Chemin "analyze" : charge la fiche déjà extraite, court-circuite l'extraction documentaire
+  if (pipelineStage === "analyze") {
+    const ao = await aoRepository.findAo(aoNum);
+    if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
+    const existingFiche = parseQualificationFiche(ao.raw?.["Fiche qualification"]);
+    if (!existingFiche?.documentExtract) {
+      throw new Error(
+        "Aucun extrait documentaire sauvegardé. Recommencez depuis le début avec vos documents."
+      );
+    }
+    const referentials = await aoRepository.readReferentials();
+    const serverless = isServerlessRuntime();
+    const { recommendation: recBudget, intelligence: intBudget } = QUALIFICATION_BUDGET_MS;
+    const fiche: QualificationFiche = { ...existingFiche };
+    fiche.recommendation = await Promise.race([
+      generateQualificationRecommendation(ao, fiche),
+      new Promise<string>((resolve) =>
+        setTimeout(
+          () =>
+            resolve(
+              serverless
+                ? "Recommandation : basée sur l'extraction documentaire (IA tronquée — délai Netlify)."
+                : "Recommandation : analyse documentaire disponible."
+            ),
+          serverless ? recBudget.serverless : recBudget.local
+        )
+      )
+    ]);
+    fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, false, {
+      llmTimeoutMs: serverless ? intBudget.serverless : intBudget.local
+    });
+    await aoRepository.upsertPipeline(ao, "BO", {
+      "Fiche qualification": JSON.stringify(fiche),
+      Recommandation: fiche.recommendation
+    });
+    await aoRepository.appendHistory({
+      timestamp: new Date().toISOString(),
+      aoNum,
+      fromStatus: ao.statut,
+      toStatus: "BO",
+      actor,
+      note: "Fiche qualification enregistrée"
+    });
+    return fiche;
+  }
+
   const pipelineStartMs = Date.now();
   const ao = await aoRepository.findAo(aoNum);
   if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
@@ -248,6 +302,11 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
     Recommandation: fiche.recommendation,
     Notes: pipelineNotes
   });
+
+  // Chemin "extract" : sauvegarde intermédiaire effectuée, retour sans LLM
+  if (pipelineStage === "extract") {
+    return { fiche, extractOnly: true as const };
+  }
 
   // Étape 2 : appels LLM avec timeout adaptatif
   fiche.recommendation = await Promise.race([
