@@ -61,25 +61,37 @@ export async function reassignmentDecisionAction(formData: FormData) {
   redirect(pathFor(aoNum));
 }
 
-export type QualificationActionState = { error: string; ok?: boolean };
+function isRedirectError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    typeof (error as { digest?: string }).digest === "string" &&
+    (error as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+  );
+}
 
-export async function qualificationAction(_prevState: QualificationActionState, formData: FormData): Promise<QualificationActionState> {
+/** Formulaire HTML natif (compatible redirect Netlify). Ne pas utiliser avec useActionState. */
+export async function qualificationAction(formData: FormData) {
+  const aoNum = String(formData.get("aoNum") || "");
+  const qualificationPath = `${pathFor(aoNum)}/qualification`;
   try {
     const actor = await requireUser();
-    const aoNum = String(formData.get("aoNum") || "");
     if (!aoNum.trim()) throw new Error("AO introuvable : identifiant manquant.");
     await saveQualification(aoNum, actor, formData);
     revalidatePath("/dashboard");
     revalidatePath(pathFor(aoNum));
-    return { error: "", ok: true };
+    revalidatePath(qualificationPath);
+    redirect(pathFor(aoNum));
   } catch (e) {
+    if (isRedirectError(e)) throw e;
     const message =
       e instanceof Error
         ? e.message
         : typeof e === "string"
           ? e
           : "Erreur inconnue pendant la génération de la fiche.";
-    return { error: message };
+    redirect(`${qualificationPath}?qualError=${encodeURIComponent(message.slice(0, 500))}`);
   }
 }
 

@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const saveQualification = vi.hoisted(() => vi.fn());
 const requireUser = vi.hoisted(() => vi.fn(async () => "user@test.com"));
 const revalidatePath = vi.hoisted(() => vi.fn());
-const redirect = vi.hoisted(() => vi.fn(() => {
-  throw new Error("redirect should not be called");
+const redirect = vi.hoisted(() => vi.fn((url: string) => {
+  const err = new Error("NEXT_REDIRECT") as Error & { digest: string };
+  err.digest = `NEXT_REDIRECT;replace;${url};307;`;
+  throw err;
 }));
 
 vi.mock("@/lib/ao", () => ({
@@ -27,22 +29,32 @@ vi.mock("next/cache", () => ({ revalidatePath }));
 
 vi.mock("next/navigation", () => ({ redirect }));
 
-describe("qualificationAction", () => {
+describe("qualificationAction (form natif)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     saveQualification.mockResolvedValue({});
   });
 
-  it("retourne ok:true sans appeler redirect (compatible useActionState)", async () => {
+  it("redirige vers la fiche AO après succès (pattern pré-PR #11)", async () => {
     const { qualificationAction } = await import("./actions");
     const formData = new FormData();
     formData.set("aoNum", "AO-ZIP-1");
-    formData.append("documentAutres", new File(["RC : critères."], "dossier.zip", { type: "application/zip" }));
 
-    const state = await qualificationAction({ error: "" }, formData);
-
-    expect(state).toEqual({ error: "", ok: true });
-    expect(redirect).not.toHaveBeenCalled();
+    await expect(qualificationAction(formData)).rejects.toMatchObject({
+      digest: expect.stringContaining("/ao/AO-ZIP-1")
+    });
+    expect(redirect).toHaveBeenCalledWith("/ao/AO-ZIP-1");
     expect(saveQualification).toHaveBeenCalled();
+  });
+
+  it("redirige vers qualification?qualError= en cas d'échec métier", async () => {
+    saveQualification.mockRejectedValue(new Error("Corpus documentaire vide"));
+    const { qualificationAction } = await import("./actions");
+    const formData = new FormData();
+    formData.set("aoNum", "AO-ERR");
+
+    await expect(qualificationAction(formData)).rejects.toMatchObject({
+      digest: expect.stringContaining("qualError=")
+    });
   });
 });
