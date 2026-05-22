@@ -17,7 +17,7 @@ import type {
   QualificationDocumentKind,
   QualificationFiche
 } from "@/lib/aoTypes";
-import { ficheForGSheets } from "@/lib/aoTypes";
+import { ficheForGSheets, remapFicheFromIntelligence } from "@/lib/aoTypes";
 
 // ─── Private helpers ────────────────────────────────────────────────────────
 
@@ -161,6 +161,7 @@ export async function saveQualification(
     fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, false, {
       llmTimeoutMs: adaptiveIntMs
     });
+    remapFicheFromIntelligence(fiche);
     await aoRepository.upsertPipeline(ao, "BO", {
       "Fiche qualification": JSON.stringify(ficheForGSheets(fiche)),
       Recommandation: fiche.recommendation
@@ -341,6 +342,7 @@ export async function saveQualification(
   fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, enrichWeb, {
     llmTimeoutMs
   });
+  remapFicheFromIntelligence(fiche);
 
   await aoRepository.upsertPipeline(ao, "BO", {
     "Fiche qualification": JSON.stringify(ficheForGSheets(fiche)),

@@ -14,7 +14,7 @@ import type {
   QualificationDocumentKind,
   QualificationFiche
 } from "@/lib/aoTypes";
-import { ficheForGSheets } from "@/lib/aoTypes";
+import { ficheForGSheets, remapFicheFromIntelligence } from "@/lib/aoTypes";
 
 export type DocumentInput = {
   name: string;
@@ -214,6 +214,7 @@ export async function saveQualificationV2(
 
   fiche.recommendation = recommendation;
   fiche.intelligence = intelligence;
+  remapFicheFromIntelligence(fiche);
 
   await aoRepository.upsertPipeline(ao, "BO", {
     "Fiche qualification": JSON.stringify(ficheForGSheets(fiche)),

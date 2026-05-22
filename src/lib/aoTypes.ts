@@ -111,6 +111,32 @@ export type QualificationFiche = {
   extractionEvidence?: QualificationExtractionEvidence;
 };
 
+/**
+ * Overwrites the base fiche text fields with clean LLM-generated content from intelligence.
+ * Mutates fiche in place (call only after intelligence is set).
+ */
+export function remapFicheFromIntelligence(fiche: QualificationFiche): void {
+  const intel = fiche.intelligence;
+  if (!intel) return;
+
+  const ident = intel.identification;
+  if (intel.clientContext) fiche.contexte = intel.clientContext;
+  if (ident?.object) fiche.objet = ident.object;
+  if (intel.scopeSynthesis) fiche.perimetre = intel.scopeSynthesis;
+  if (intel.expectedDeliverables?.length)
+    fiche.livrables = intel.expectedDeliverables.map((d) => `• ${d}`).join("\n");
+  if (ident?.duration) fiche.duree = ident.duration;
+  if (intel.requiredProfile?.length)
+    fiche.profils = intel.requiredProfile.map((p) => `• ${p}`).join("\n");
+  if (ident?.budget) fiche.budget = ident.budget;
+  if (intel.winThemes?.length)
+    fiche.chances = intel.winThemes.map((w) => `• ${w}`).join("\n");
+  if (intel.risks?.length)
+    fiche.risques = intel.risks.map((r) => `• ${r.label} (${r.severity}) : ${r.mitigation}`).join("\n");
+  if (intel.decisionWatchpoints?.length)
+    fiche.pointsVigilance = intel.decisionWatchpoints.map((w) => w.point);
+}
+
 const GSHEETS_CELL_LIMIT = 49_000;
 
 /**
