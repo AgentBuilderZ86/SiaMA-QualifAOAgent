@@ -57,7 +57,7 @@ export function QualificationForm({
       if (!contentType.includes("application/json")) {
         const hint =
           response.status === 504 || response.status === 502
-            ? "Le traitement a dépassé le délai serveur (ZIP volumineux ou OCR). Réessayez sans enrichissement web ou avec des fichiers séparés."
+            ? "Le traitement a dépassé le délai serveur Netlify (~26 s). La fiche documentaire peut être partiellement enregistrée : rechargez la fiche AO. Sinon réessayez avec l'Avis seul ou un extrait manuel."
             : `Réponse serveur inattendue (HTTP ${response.status}).`;
         setError(hint);
         return;

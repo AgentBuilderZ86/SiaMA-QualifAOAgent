@@ -11,7 +11,13 @@ import {
   type AtelierCommitPayload
 } from "@/lib/atelierStrategie";
 import { buildAtelierSystemPrompt, buildAtelierUserPayload } from "@/lib/atelierPrompt";
-import { extractDocumentSections, extractUploadedDocument, extractUploadedDocuments, summarizeDocumentText } from "@/lib/documents";
+import {
+  extractDocumentSections,
+  extractUploadedDocument,
+  extractUploadedDocuments,
+  isServerlessRuntime,
+  summarizeDocumentText
+} from "@/lib/documents";
 import { buildCvAdaptation, parseQualificationForCvScoring, type CvAdaptationResult, type UploadedCvForAdaptation } from "@/lib/cvScoring";
 import { extractKeyMetadata, isPlaceholderSection } from "@/lib/qualification/documentMetadata";
 import { filenameSignalsPrefix, parseFilenameSignals } from "@/lib/qualification/filenameSignals";
@@ -378,10 +384,12 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
 
   const existingFiche = parseQualificationFiche(ao.raw?.["Fiche qualification"]);
   const manualExtract = String(formData.get("documentExtract") || "");
-  const includeSourceDocuments = formData.get("includeSourceDocuments") === "yes";
   const forceDocumentExtraction = formData.get("forceDocumentExtraction") === "yes";
   const uploadedDocuments = await extractUploadedDocuments(formData);
-  const cacheDocuments = includeSourceDocuments ? await cachedQualificationDocuments(ao) : [];
+  const includeSourceDocuments = formData.get("includeSourceDocuments") === "yes";
+  const skipSourceCache = isServerlessRuntime() && uploadedDocuments.length > 0;
+  const cacheDocuments =
+    includeSourceDocuments && !skipSourceCache ? await cachedQualificationDocuments(ao) : [];
   const freshDocuments = [...uploadedDocuments, ...cacheDocuments];
   const previousDocuments = existingFiche?.documents?.length ? existingFiche.documents : legacyDocumentFromFiche(existingFiche);
   const documents = freshDocuments.length || forceDocumentExtraction ? freshDocuments : previousDocuments;
@@ -479,18 +487,35 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
     filenameSignals: Object.keys(filenameSignals).length ? filenameSignals : undefined,
     extractionEvidence
   };
-  const llmTimeoutMs = zipMode ? 18_000 : undefined;
+  const serverless = isServerlessRuntime();
+  const llmTimeoutMs = serverless ? 14_000 : zipMode ? 18_000 : 0;
+  const recTimeoutMs = serverless ? 6_000 : zipMode ? 8_000 : 60_000;
+
+  fiche.recommendation = "Analyse documentaire enregistrée — génération IA en cours.";
+  fiche.intelligence = undefined;
+
+  await aoRepository.upsertPipeline(ao, "BO", {
+    "Fiche qualification": JSON.stringify(fiche),
+    Recommandation: fiche.recommendation,
+    Notes: pipelineNotes
+  });
+
   fiche.recommendation = await Promise.race([
     generateQualificationRecommendation(ao, fiche),
     new Promise<string>((resolve) =>
       setTimeout(
-        () => resolve("Recommandation : analyse documentaire disponible — fiche intelligente complétée en mode dégradé (archive ZIP)."),
-        zipMode ? 8_000 : 60_000
+        () =>
+          resolve(
+            serverless || zipMode
+              ? "Recommandation : basée sur l'extraction documentaire (IA tronquée — délai Netlify)."
+              : "Recommandation : analyse documentaire disponible."
+          ),
+        recTimeoutMs
       )
     )
   ]);
   fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, enrichWeb, {
-    llmTimeoutMs: llmTimeoutMs ?? 0
+    llmTimeoutMs
   });
 
   await aoRepository.upsertPipeline(ao, "BO", {

@@ -25,6 +25,7 @@ import type { ReferentielItem } from "@/lib/aoTypes";
 import type { PatternScoreResult } from "@/lib/qualification/patterns";
 import { scoreAoFromPatterns } from "@/lib/qualification/patterns";
 import { researchQualificationContext } from "@/lib/qualification/research";
+import { isServerlessRuntime } from "@/lib/documents";
 import { completeChat, hasConfiguredLlm } from "@/lib/llmChat";
 
 function text(value: unknown, fallback = "À confirmer") {
@@ -1025,10 +1026,11 @@ async function callQualificationLlm(
               : { decision: "Aucun pattern Sia activé", guidance: "Ne pas inventer de pattern ; rester sur l'analyse documentaire." }
   });
 
-  const qualMaxTokens = parseInt(
+  const configuredTokens = parseInt(
     process.env.LLM_QUALIFICATION_MAX_TOKENS || process.env.ANTHROPIC_MAX_OUTPUT_TOKENS || "16384",
     10
   );
+  const qualMaxTokens = isServerlessRuntime() ? Math.min(configuredTokens, 4096) : configuredTokens;
 
   const content = await completeChat({
     system,

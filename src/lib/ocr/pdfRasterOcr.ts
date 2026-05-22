@@ -18,6 +18,8 @@ export async function ocrPdfBuffer(buffer: Buffer): Promise<{ text: string; warn
 
   const warnings: string[] = [];
   const parts: string[] = [];
+  const pageLimit =
+    buffer.length > 900_000 ? 1 : maxOcrPages();
 
   try {
     const doc = await getDocument({
@@ -27,7 +29,6 @@ export async function ocrPdfBuffer(buffer: Buffer): Promise<{ text: string; warn
     }).promise;
 
     const total = doc.numPages;
-    const pageLimit = maxOcrPages();
     const pages = Math.min(total, pageLimit);
     if (total > pageLimit) {
       warnings.push(`OCR PDF : ${pageLimit}/${total} pages analysées (limite performance).`);

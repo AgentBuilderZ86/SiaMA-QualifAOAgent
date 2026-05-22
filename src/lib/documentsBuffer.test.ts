@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { extractDocumentBufferWithOcr, extractUploadedDocuments, extractDocumentBuffer } from "@/lib/documents";
 
 describe("extractDocumentBuffer", () => {
@@ -53,6 +53,19 @@ describe("extractDocumentBuffer", () => {
     expect(extracted.text).toContain("mission de conseil");
     expect(extracted.text).toContain("critères techniques");
     expect(extracted.warning).not.toContain("ENOENT");
+  });
+
+  it("sur Netlify, saute l'OCR si l'Avis apporte déjà assez de texte natif", async () => {
+    const prev = process.env.NETLIFY;
+    process.env.NETLIFY = "true";
+    const formData = new FormData();
+    formData.append("documentAvis", new File(["Avis : " + "x".repeat(1300)], "avis.txt", { type: "text/plain" }));
+    formData.append("documentCps", new File(["%PDF-1.4\n%%EOF"], "cps.pdf", { type: "application/pdf" }));
+    const documents = await extractUploadedDocuments(formData);
+    process.env.NETLIFY = prev;
+    expect(documents.find((d) => d.kind === "Avis")?.text.length).toBeGreaterThan(1000);
+    expect(documents.find((d) => d.kind === "CPS")?.ocrUsed).toBeFalsy();
+    expect(documents.find((d) => d.kind === "CPS")?.warning).toContain("OCR non exécuté");
   });
 
   it("signale explicitement un besoin OCR quand un PDF n'a pas de texte exploitable", async () => {

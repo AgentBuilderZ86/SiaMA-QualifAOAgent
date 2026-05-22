@@ -53,9 +53,18 @@ const MIN_TEXT_CHARS_BEFORE_OCR = 180;
 const OCR_POLL_INTERVAL_MS = 1_000;
 const OCR_MAX_POLLS = 30;
 
-function isServerlessRuntime() {
+export function isServerlessRuntime() {
   return Boolean(process.env.NETLIFY === "true" || process.env.NETLIFY === "1" || process.env.AWS_LAMBDA_FUNCTION_NAME);
 }
+
+const KIND_OCR_PRIORITY: Record<QualificationDocumentKind, number> = {
+  Avis: 0,
+  CPS: 1,
+  RC: 2,
+  Autre: 9
+};
+/** Si le texte natif cumulé dépasse ce seuil, on évite l'OCR sur Netlify (gain 10–30 s). */
+const SERVERLESS_SKIP_OCR_IF_NATIVE_CHARS = 1200;
 
 function maxZipEntries() {
   return isServerlessRuntime() ? MAX_ZIP_ENTRIES_SERVERLESS : MAX_ZIP_ENTRIES_LOCAL;
@@ -592,6 +601,20 @@ const DOCUMENT_UPLOAD_FIELDS: Array<{ field: string; kind: QualificationDocument
   { field: "document", kind: "Autre" }
 ];
 
+function toQualificationExtraction(doc: ExtractedDocument): QualificationDocumentExtraction {
+  return {
+    kind: doc.kind || "Autre",
+    name: doc.name,
+    text: doc.text,
+    warning: doc.warning,
+    extractionMode: doc.extractionMode || (doc.text.trim() ? "native" : "unreadable"),
+    ocrUsed: doc.ocrUsed,
+    sha256: doc.sha256,
+    sourceUrl: doc.sourceUrl,
+    extractedAt: new Date().toISOString()
+  };
+}
+
 export async function extractUploadedDocuments(formData: FormData): Promise<QualificationDocumentExtraction[]> {
   const files = DOCUMENT_UPLOAD_FIELDS.flatMap(({ field, kind }) =>
     formData
@@ -600,20 +623,72 @@ export async function extractUploadedDocuments(formData: FormData): Promise<Qual
       .map((file) => ({ file, kind }))
   );
 
-  const extracted = await Promise.all(files.map(({ file, kind }) => extractUploadedDocument(file, kind)));
-  return extracted
-    .filter((doc) => doc.name || doc.text.trim())
-    .map((doc) => ({
-      kind: doc.kind || "Autre",
-      name: doc.name,
-      text: doc.text,
-      warning: doc.warning,
-      extractionMode: doc.extractionMode || (doc.text.trim() ? "native" : "unreadable"),
-      ocrUsed: doc.ocrUsed,
-      sha256: doc.sha256,
-      sourceUrl: doc.sourceUrl,
-      extractedAt: new Date().toISOString()
-    }));
+  if (!files.length) return [];
+
+  const natives = await Promise.all(
+    files.map(async ({ file, kind }) => {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const native = await extractDocumentBuffer({
+        name: file.name,
+        buffer,
+        contentType: file.type,
+        kind
+      });
+      return { file, kind, buffer, native };
+    })
+  );
+
+  const results: ExtractedDocument[] = natives.map(({ file, kind, buffer, native }) => ({
+    ...native,
+    kind,
+    sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
+    extractionMode: native.text.trim() ? ("native" as const) : ("unreadable" as const),
+    ocrUsed: false
+  }));
+
+  const totalNativeChars = results.reduce((sum, doc) => sum + doc.text.trim().length, 0);
+  const serverless = isServerlessRuntime();
+  const skipOcr = serverless && totalNativeChars >= SERVERLESS_SKIP_OCR_IF_NATIVE_CHARS;
+  const maxOcrRuns = serverless ? (skipOcr ? 0 : 1) : 3;
+
+  if (skipOcr) {
+    for (const doc of results) {
+      if (!doc.text.trim()) {
+        doc.warning = [doc.warning, "OCR non exécuté : texte Avis suffisant pour la qualification (délai Netlify)."]
+          .filter(Boolean)
+          .join(" ");
+      }
+    }
+  } else if (maxOcrRuns > 0) {
+    const ocrTargets = natives
+      .map((item, index) => ({ ...item, index }))
+      .filter(
+        ({ native, file }) =>
+          native.text.trim().length < MIN_TEXT_CHARS_BEFORE_OCR && supportsOcr(file.name, file.type)
+      )
+      .sort((a, b) => KIND_OCR_PRIORITY[a.kind] - KIND_OCR_PRIORITY[b.kind]);
+
+    let ocrRuns = 0;
+    for (const target of ocrTargets) {
+      if (ocrRuns >= maxOcrRuns) break;
+      const ocr = await extractDocumentBufferWithOcr({
+        name: target.file.name,
+        buffer: target.buffer,
+        contentType: target.file.type,
+        kind: target.kind
+      });
+      if (ocr.text.trim() || ocr.warning) {
+        results[target.index] = ocr;
+        ocrRuns += 1;
+      }
+    }
+    if (ocrTargets.length > ocrRuns && serverless) {
+      const note = `OCR limité : ${ocrRuns}/${ocrTargets.length} pièce(s) scannée(s) traitée(s) (priorité Avis/CPS/RC).`;
+      if (results[0]) results[0].warning = [results[0].warning, note].filter(Boolean).join(" ");
+    }
+  }
+
+  return results.filter((doc) => doc.name || doc.text.trim()).map(toQualificationExtraction);
 }
 
 export function summarizeDocumentText(text: string, fallback: string) {
