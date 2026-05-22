@@ -92,8 +92,8 @@ sequenceDiagram
 
 ### P0 — Bloquants immédiats (prod actuelle)
 
-1. **`useActionState` + `redirect()`** (PR #11)  
-2. **PR #13 non mergée / non déployée**  
+1. **Formulaire dans un composant `"use client"`** : même avec `action={serverAction}`, Next.js utilise le **protocole Server Action** (fetch RSC), pas un POST HTML → `redirect()` / timeout = *unexpected response*. **Correctif : route API JSON + `fetch`.**
+2. **`useActionState` + `redirect()`** (PR #11, corrigé partiellement)  
 3. **Import `pdf-parse/index.js`** sur chaque PDF en ZIP  
 
 ### P1 — Bloquants fréquents (ZIP 2,9 Mo)

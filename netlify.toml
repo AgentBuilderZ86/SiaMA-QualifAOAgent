@@ -21,7 +21,7 @@
 [functions."refresh-ao-sources"]
   schedule = "0 */6 * * *"
 
-## Server Actions (qualification ZIP + IA) : timeout max Netlify (60 s sur offres payantes).
+## Server Actions / API qualification (ZIP + OCR + IA) : maxDuration=60 dans la route API.
 [functions]
   node_bundler = "esbuild"
 

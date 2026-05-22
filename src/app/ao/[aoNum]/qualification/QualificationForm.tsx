@@ -1,7 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { qualificationAction } from "../../actions";
 
 const questions = [
   ["contexte", "Contexte métier et enjeux stratégiques"],
@@ -20,6 +20,10 @@ const documentFields = [
   ["documentRc", "RC / règlement de consultation", "rc.pdf"]
 ] as const;
 
+type ApiQualificationResponse =
+  | { ok: true; redirectTo: string }
+  | { ok: false; error: string };
+
 export function QualificationForm({
   aoNum,
   hasSourceUrl,
@@ -29,19 +33,62 @@ export function QualificationForm({
   hasSourceUrl: boolean;
   initialError?: string;
 }) {
+  const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState(initialError);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError("");
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    formData.set("aoNum", aoNum);
+
+    try {
+      const response = await fetch(`/api/ao/${encodeURIComponent(aoNum)}/qualification`, {
+        method: "POST",
+        body: formData,
+        credentials: "include"
+      });
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        const hint =
+          response.status === 504 || response.status === 502
+            ? "Le traitement a dépassé le délai serveur (ZIP volumineux ou OCR). Réessayez sans enrichissement web ou avec des fichiers séparés."
+            : `Réponse serveur inattendue (HTTP ${response.status}).`;
+        setError(hint);
+        return;
+      }
+
+      const payload = (await response.json()) as ApiQualificationResponse;
+      if (!payload.ok) {
+        setError(payload.error || "Échec de la génération.");
+        return;
+      }
+
+      router.replace(payload.redirectTo);
+      router.refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
+      );
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
-    <form
-      action={qualificationAction}
-      className="card section form-grid qualification-form"
-      onSubmit={() => setPending(true)}
-    >
+    <form onSubmit={handleSubmit} className="card section form-grid qualification-form">
       <input type="hidden" name="aoNum" value={aoNum} />
 
-      {initialError ? (
+      {error ? (
         <div className="alert" role="alert">
-          {initialError}
+          {error}
         </div>
       ) : null}
 
