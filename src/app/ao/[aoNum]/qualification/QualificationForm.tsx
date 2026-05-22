@@ -1,8 +1,7 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { qualificationAction, type QualificationActionState } from "../../actions";
+import { useState } from "react";
+import { qualificationAction } from "../../actions";
 
 const questions = [
   ["contexte", "Contexte métier et enjeux stratégiques"],
@@ -21,25 +20,28 @@ const documentFields = [
   ["documentRc", "RC / règlement de consultation", "rc.pdf"]
 ] as const;
 
-const initialState: QualificationActionState = { error: "" };
-
-export function QualificationForm({ aoNum, hasSourceUrl }: { aoNum: string; hasSourceUrl: boolean }) {
-  const router = useRouter();
-  const [state, formAction, pending] = useActionState(qualificationAction, initialState);
-
-  useEffect(() => {
-    if (state.ok) {
-      router.replace(`/ao/${encodeURIComponent(aoNum)}`);
-    }
-  }, [state.ok, aoNum, router]);
+export function QualificationForm({
+  aoNum,
+  hasSourceUrl,
+  initialError = ""
+}: {
+  aoNum: string;
+  hasSourceUrl: boolean;
+  initialError?: string;
+}) {
+  const [pending, setPending] = useState(false);
 
   return (
-    <form action={formAction} className="card section form-grid qualification-form">
+    <form
+      action={qualificationAction}
+      className="card section form-grid qualification-form"
+      onSubmit={() => setPending(true)}
+    >
       <input type="hidden" name="aoNum" value={aoNum} />
 
-      {state.error ? (
+      {initialError ? (
         <div className="alert" role="alert">
-          {state.error}
+          {initialError}
         </div>
       ) : null}
 
@@ -47,12 +49,12 @@ export function QualificationForm({ aoNum, hasSourceUrl }: { aoNum: string; hasS
         {pending ? (
           <>
             <strong>Génération en cours…</strong>
-            <span>Extraction documents → OCR si nécessaire → analyse IA → enregistrement Google Sheets.</span>
+            <span>Extraction documents → OCR si nécessaire → analyse IA → enregistrement. Ne fermez pas l’onglet.</span>
           </>
         ) : (
           <>
             <strong>Dossier documentaire AO</strong>
-            <span>Déposez l’avis, le CPS et le RC, ou un ZIP complet. PDF scannés et images : OCR Tesseract automatique (sans configuration).</span>
+            <span>Déposez l’avis, le CPS et le RC, ou un ZIP complet. PDF scannés et images : OCR Tesseract automatique.</span>
           </>
         )}
       </div>
@@ -100,7 +102,7 @@ export function QualificationForm({ aoNum, hasSourceUrl }: { aoNum: string; hasS
             id="documentExtract"
             name="documentExtract"
             rows={5}
-            placeholder="Collez ici un extrait fiable si l’OCR n’est pas encore configuré ou si la pièce est trop dégradée."
+            placeholder="Collez ici un extrait fiable si l’OCR ne suffit pas."
           />
         </div>
 
@@ -111,7 +113,7 @@ export function QualificationForm({ aoNum, hasSourceUrl }: { aoNum: string; hasS
         </div>
         <div className="field">
           <label>
-            <input name="enrichWeb" type="checkbox" value="yes" defaultChecked /> Enrichir avec recherche web sourcée client / secteur / concurrents
+            <input name="enrichWeb" type="checkbox" value="yes" /> Enrichir avec recherche web sourcée (plus lent, décoché par défaut)
           </label>
         </div>
       </fieldset>
