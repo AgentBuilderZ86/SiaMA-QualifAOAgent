@@ -214,8 +214,15 @@ export async function saveQualificationV2(
   fiche.recommendation = recommendation;
   fiche.intelligence = intelligence;
 
+  // Strip raw extracted text before serializing to Google Sheets (50k char/cell limit).
+  const ficheForStorage = {
+    ...fiche,
+    documentExtract: "",
+    documents: fiche.documents?.map(({ text: _text, ...rest }) => rest),
+  };
+
   await aoRepository.upsertPipeline(ao, "BO", {
-    "Fiche qualification": JSON.stringify(fiche),
+    "Fiche qualification": JSON.stringify(ficheForStorage),
     Recommandation: fiche.recommendation,
     Notes: pipelineNotes
   });
