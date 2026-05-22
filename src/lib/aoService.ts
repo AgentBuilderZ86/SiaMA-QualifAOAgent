@@ -232,8 +232,18 @@ function documentSeparator(document: Pick<QualificationDocumentExtraction, "kind
   return `--- Document ${document.kind} : ${document.name}${source} ---`;
 }
 
+const DOCUMENT_CORPUS_ORDER: Record<QualificationDocumentKind, number> = {
+  RC: 0,
+  Avis: 1,
+  CPS: 2,
+  Autre: 3
+};
+
 function joinQualificationDocuments(documents: QualificationDocumentExtraction[], manualExtract: string) {
-  const parts = documents
+  const ordered = [...documents].sort(
+    (a, b) => (DOCUMENT_CORPUS_ORDER[a.kind] ?? 9) - (DOCUMENT_CORPUS_ORDER[b.kind] ?? 9)
+  );
+  const parts = ordered
     .filter((document) => document.text.trim())
     .map((document) => `${documentSeparator(document)}\n${document.text.trim()}`);
   if (manualExtract.trim()) {
@@ -452,8 +462,8 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
   const pipelineNotes = (() => {
     const base = documentExtractionStatus(documents, manualExtract);
     const zipNote = zipMode
-      ? "Mode archive ZIP : extraction native prioritaire, OCR limité (2 fichiers), enrichWeb désactivé."
-      : "";
+      ? "Mode archive ZIP : extraction native prioritaire, OCR limité (priorité RC puis Avis), enrichWeb désactivé."
+      : "Priorité documentaire : RC puis Avis (OCR ciblé sur Netlify).";
     const enrichNote = zipMode && enrichWebRequested ? "Enrichissement web ignoré pour respecter le délai serveur." : "";
     const hint = meta.matchNotes[0];
     const merged = [base, zipNote, enrichNote, hint && base.length < 350 ? hint : ""].filter(Boolean).join(" · ");

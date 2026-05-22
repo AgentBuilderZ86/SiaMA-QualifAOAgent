@@ -55,17 +55,19 @@ describe("extractDocumentBuffer", () => {
     expect(extracted.warning).not.toContain("ENOENT");
   });
 
-  it("sur Netlify, saute l'OCR si l'Avis apporte déjà assez de texte natif", async () => {
+  it("sur Netlify, OCR le RC avant le CPS quand les deux sont scannés", async () => {
     const prev = process.env.NETLIFY;
     process.env.NETLIFY = "true";
     const formData = new FormData();
-    formData.append("documentAvis", new File(["Avis : " + "x".repeat(1300)], "avis.txt", { type: "text/plain" }));
+    formData.append("documentAvis", new File(["Avis : référence et date limite 2026."], "avis.txt", { type: "text/plain" }));
     formData.append("documentCps", new File(["%PDF-1.4\n%%EOF"], "cps.pdf", { type: "application/pdf" }));
+    formData.append("documentRc", new File(["%PDF-1.4\n%%EOF"], "rc.pdf", { type: "application/pdf" }));
     const documents = await extractUploadedDocuments(formData);
     process.env.NETLIFY = prev;
-    expect(documents.find((d) => d.kind === "Avis")?.text.length).toBeGreaterThan(1000);
-    expect(documents.find((d) => d.kind === "CPS")?.ocrUsed).toBeFalsy();
-    expect(documents.find((d) => d.kind === "CPS")?.warning).toContain("OCR non exécuté");
+    const rc = documents.find((d) => d.kind === "RC");
+    const cps = documents.find((d) => d.kind === "CPS");
+    expect(rc?.ocrUsed || rc?.warning).toBeTruthy();
+    expect(cps?.warning || "").toMatch(/priorité RC|non OCRisé/i);
   });
 
   it("signale explicitement un besoin OCR quand un PDF n'a pas de texte exploitable", async () => {

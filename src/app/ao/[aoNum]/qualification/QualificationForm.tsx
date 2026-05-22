@@ -101,7 +101,7 @@ export function QualificationForm({
         ) : (
           <>
             <strong>Dossier documentaire AO</strong>
-            <span>Déposez l’avis, le CPS et le RC, ou un ZIP complet. Sur ZIP : extraction rapide + OCR limité (priorité avis/CPS/RC).</span>
+            <span>Déposez l’Avis et le RC (prioritaires), plus le CPS si disponible. Sur Netlify, l’OCR cible d’abord le RC scanné.</span>
           </>
         )}
       </div>

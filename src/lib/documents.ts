@@ -57,14 +57,13 @@ export function isServerlessRuntime() {
   return Boolean(process.env.NETLIFY === "true" || process.env.NETLIFY === "1" || process.env.AWS_LAMBDA_FUNCTION_NAME);
 }
 
+/** Priorité métier : RC (critères, périmètre) puis Avis (identification) puis CPS. */
 const KIND_OCR_PRIORITY: Record<QualificationDocumentKind, number> = {
-  Avis: 0,
-  CPS: 1,
-  RC: 2,
+  RC: 0,
+  Avis: 1,
+  CPS: 2,
   Autre: 9
 };
-/** Si le texte natif cumulé dépasse ce seuil, on évite l'OCR sur Netlify (gain 10–30 s). */
-const SERVERLESS_SKIP_OCR_IF_NATIVE_CHARS = 1200;
 
 function maxZipEntries() {
   return isServerlessRuntime() ? MAX_ZIP_ENTRIES_SERVERLESS : MAX_ZIP_ENTRIES_LOCAL;
@@ -76,9 +75,9 @@ function maxZipDeferredOcr() {
 
 function zipEntryPriority(path: string) {
   const lower = path.toLowerCase();
-  if (/avis|aao|appel.?off/i.test(lower)) return 0;
-  if (/cps|cctp|dce|cahier/i.test(lower)) return 1;
-  if (/(^|\/)(rc|reglement)[^a-z]|consultation/i.test(lower)) return 2;
+  if (/(^|\/)(rc|reglement)[^a-z]|consultation/i.test(lower)) return 0;
+  if (/avis|aao|appel.?off/i.test(lower)) return 1;
+  if (/cps|cctp|dce|cahier/i.test(lower)) return 2;
   if (/bpu|financ|prix/i.test(lower)) return 4;
   return 5;
 }
@@ -315,7 +314,7 @@ async function extractWithAzureDocumentIntelligence(buffer: Buffer, contentType:
   return { text: "", warning: "OCR Azure expiré avant résultat." };
 }
 
-async function runOcrFallback(buffer: Buffer, name: string, contentType: string) {
+async function runOcrFallback(buffer: Buffer, name: string, contentType: string, kind?: QualificationDocumentKind) {
   if (!supportsOcr(name, contentType)) {
     return { text: "", warning: "OCR non applicable à ce format." };
   }
@@ -333,7 +332,7 @@ async function runOcrFallback(buffer: Buffer, name: string, contentType: string)
   const ext = name.split(".").pop()?.toLowerCase() || "";
   const type = contentType.toLowerCase();
   if (ext === "pdf" || type.includes("pdf")) {
-    return ocrPdfBuffer(buffer);
+    return ocrPdfBuffer(buffer, { documentKind: kind });
   }
   return recognizeImageBuffer(buffer, name);
 }
@@ -562,7 +561,7 @@ export async function extractDocumentBufferWithOcr({
   };
   if (native.text.trim().length >= MIN_TEXT_CHARS_BEFORE_OCR || !supportsOcr(name, contentType)) return base;
 
-  const ocr = await runOcrFallback(buffer, name, contentType);
+  const ocr = await runOcrFallback(buffer, name, contentType, kind);
   if (ocr.text.trim()) {
     return {
       ...base,
@@ -646,45 +645,48 @@ export async function extractUploadedDocuments(formData: FormData): Promise<Qual
     ocrUsed: false
   }));
 
-  const totalNativeChars = results.reduce((sum, doc) => sum + doc.text.trim().length, 0);
   const serverless = isServerlessRuntime();
-  const skipOcr = serverless && totalNativeChars >= SERVERLESS_SKIP_OCR_IF_NATIVE_CHARS;
-  const maxOcrRuns = serverless ? (skipOcr ? 0 : 1) : 3;
+  const maxOcrRuns = serverless ? 2 : 4;
 
-  if (skipOcr) {
-    for (const doc of results) {
-      if (!doc.text.trim()) {
-        doc.warning = [doc.warning, "OCR non exécuté : texte Avis suffisant pour la qualification (délai Netlify)."]
-          .filter(Boolean)
-          .join(" ");
-      }
-    }
-  } else if (maxOcrRuns > 0) {
-    const ocrTargets = natives
-      .map((item, index) => ({ ...item, index }))
-      .filter(
-        ({ native, file }) =>
-          native.text.trim().length < MIN_TEXT_CHARS_BEFORE_OCR && supportsOcr(file.name, file.type)
-      )
-      .sort((a, b) => KIND_OCR_PRIORITY[a.kind] - KIND_OCR_PRIORITY[b.kind]);
+  const ocrTargets = natives
+    .map((item, index) => ({ ...item, index }))
+    .filter(
+      ({ native, file }) =>
+        native.text.trim().length < MIN_TEXT_CHARS_BEFORE_OCR && supportsOcr(file.name, file.type)
+    )
+    .sort((a, b) => KIND_OCR_PRIORITY[a.kind] - KIND_OCR_PRIORITY[b.kind]);
 
-    let ocrRuns = 0;
-    for (const target of ocrTargets) {
-      if (ocrRuns >= maxOcrRuns) break;
-      const ocr = await extractDocumentBufferWithOcr({
-        name: target.file.name,
-        buffer: target.buffer,
-        contentType: target.file.type,
-        kind: target.kind
-      });
-      if (ocr.text.trim() || ocr.warning) {
-        results[target.index] = ocr;
-        ocrRuns += 1;
-      }
-    }
-    if (ocrTargets.length > ocrRuns && serverless) {
-      const note = `OCR limité : ${ocrRuns}/${ocrTargets.length} pièce(s) scannée(s) traitée(s) (priorité Avis/CPS/RC).`;
-      if (results[0]) results[0].warning = [results[0].warning, note].filter(Boolean).join(" ");
+  let ocrRuns = 0;
+  const ocrProcessedKinds = new Set<QualificationDocumentKind>();
+  for (const target of ocrTargets) {
+    if (ocrRuns >= maxOcrRuns) break;
+    const ocr = await extractDocumentBufferWithOcr({
+      name: target.file.name,
+      buffer: target.buffer,
+      contentType: target.file.type,
+      kind: target.kind
+    });
+    results[target.index] = ocr;
+    ocrRuns += 1;
+    ocrProcessedKinds.add(target.kind);
+  }
+
+  for (const doc of results) {
+    if (doc.text.trim() || doc.ocrUsed) continue;
+    if (doc.kind === "CPS" && serverless && ocrTargets.some((t) => t.kind === "CPS")) {
+      doc.warning = [
+        doc.warning,
+        "CPS non OCRisé sur Netlify (priorité RC et Avis). Collez un extrait CPS dans le champ manuel si besoin."
+      ]
+        .filter(Boolean)
+        .join(" ");
+    } else if (!ocrProcessedKinds.has(doc.kind as QualificationDocumentKind) && ocrTargets.some((t) => t.kind === doc.kind)) {
+      doc.warning = [
+        doc.warning,
+        `OCR non exécuté : priorité RC et Avis (${ocrRuns}/${ocrTargets.length} passe(s) OCR sur Netlify).`
+      ]
+        .filter(Boolean)
+        .join(" ");
     }
   }
 
