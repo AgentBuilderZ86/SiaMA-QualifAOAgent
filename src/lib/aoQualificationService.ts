@@ -164,7 +164,8 @@ export async function saveQualification(
       "Fiche qualification": JSON.stringify(fiche),
       Recommandation: fiche.recommendation
     });
-    await aoRepository.appendHistory({
+    // Fire-and-forget : appendHistory non bloquant pour tenir dans les 60 s Netlify
+    void aoRepository.appendHistory({
       timestamp: new Date().toISOString(),
       aoNum,
       fromStatus: ao.statut,

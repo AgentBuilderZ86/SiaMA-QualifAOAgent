@@ -232,7 +232,12 @@ export function QualificationForm({
         d2.set("pipelineStage", "analyze");
         const r2 = await callQualificationApi(aoNum, d2);
         setPending(false);
-        if (!r2.ok) { setError(r2.error); return; }
+        if (!r2.ok) {
+          // Étape 1 (extraction) a réussi → on peut relancer l'analyse IA seule
+          setPartialSave(true);
+          setError(r2.error);
+          return;
+        }
         if ("redirectTo" in r2) { router.replace(r2.redirectTo); router.refresh(); }
         return;
       }
