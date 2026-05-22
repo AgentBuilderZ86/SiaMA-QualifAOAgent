@@ -104,10 +104,41 @@ async function callQualificationApi(aoNum: string, body: FormData): Promise<ApiQ
         error: "Délai serveur Netlify dépassé (~60 s). L'extraction documentaire a été sauvegardée. Utilisez « Relancer l'analyse IA » pour compléter sans re-uploader vos documents."
       };
     }
+    if (response.status === 500 || response.status === 413) {
+      return {
+        ok: false,
+        error: "Erreur serveur (HTTP " + response.status + "). Si vous avez uploadé un fichier volumineux (> 5 Mo), le serveur ne peut pas le traiter directement. Utilisez le champ « Extrait manuel » pour coller les sections clés du document (objet, périmètre, budget, critères)."
+      };
+    }
     return { ok: false, error: `Réponse serveur inattendue (HTTP ${response.status}).` };
   }
 
   return response.json() as Promise<ApiQualificationResponse>;
+}
+
+const NETLIFY_FILE_LIMIT_BYTES = 5 * 1024 * 1024; // 5 Mo — limite conservative (Netlify cap ~6 Mo)
+
+function checkFileSizeWarning(formData: FormData): string {
+  const fields = ["documentAvis", "documentCps", "documentRc", "documentAutres", "document"];
+  const oversized: string[] = [];
+  let total = 0;
+  for (const field of fields) {
+    for (const entry of formData.getAll(field)) {
+      if (entry instanceof File && entry.size > 0) {
+        total += entry.size;
+        if (entry.size > NETLIFY_FILE_LIMIT_BYTES) {
+          oversized.push(`${entry.name} (${Math.round(entry.size / (1024 * 1024) * 10) / 10} Mo)`);
+        }
+      }
+    }
+  }
+  if (oversized.length) {
+    return `Fichier(s) trop volumineux pour le serveur (limite ~5 Mo par fichier) : ${oversized.join(", ")}. Collez les sections clés dans « Extrait manuel » à la place.`;
+  }
+  if (total > NETLIFY_FILE_LIMIT_BYTES * 2) {
+    return `Volume total des fichiers trop élevé (${Math.round(total / (1024 * 1024))} Mo, limite ~10 Mo). Réduisez le nombre de pièces ou utilisez l'extrait manuel.`;
+  }
+  return "";
 }
 
 export function QualificationForm({
@@ -174,11 +205,20 @@ export function QualificationForm({
     formData.set("aoNum", aoNum);
     formData.set("pipelineStage", "extract");
 
+    // Validation taille fichiers avant envoi
+    const sizeWarning = checkFileSizeWarning(formData);
+    if (sizeWarning) {
+      setError(sizeWarning);
+      setPending(false);
+      return;
+    }
+
     try {
       // Étape 1 : extraction documentaire (~15-25 s)
       const r1 = await callQualificationApi(aoNum, formData);
       if (!r1.ok) {
-        setPartialSave(true);
+        // partialSave uniquement si timeout (504/502) — pas pour crash serveur (500)
+        setPartialSave(r1.error.includes("Délai serveur") || r1.error.includes("sauvegardée"));
         setError(r1.error);
         setPending(false);
         return;
