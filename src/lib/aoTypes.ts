@@ -111,6 +111,51 @@ export type QualificationFiche = {
   extractionEvidence?: QualificationExtractionEvidence;
 };
 
+const GSHEETS_CELL_LIMIT = 49_000;
+
+/**
+ * Returns a copy of the fiche safe to serialize into a single Google Sheets cell.
+ * Strips raw document text (large) and the derived pptCopyBlock (regenerated on read).
+ * Falls back to hard-truncating the JSON string if the result is still too large.
+ */
+export function ficheForGSheets(fiche: QualificationFiche): QualificationFiche {
+  const stripped: QualificationFiche = {
+    ...fiche,
+    documentExtract: "",
+    documents: fiche.documents?.map(({ text: _text, ...rest }) => ({ ...rest, text: "" })),
+    intelligence: fiche.intelligence
+      ? { ...fiche.intelligence, pptCopyBlock: "" }
+      : undefined,
+  };
+
+  const json = JSON.stringify(stripped);
+  if (json.length <= GSHEETS_CELL_LIMIT) return stripped;
+
+  // Last-resort: strip slideStoryboard speaker notes and source excerpts
+  const trimmed: QualificationFiche = {
+    ...stripped,
+    intelligence: stripped.intelligence
+      ? {
+          ...stripped.intelligence,
+          slideStoryboard: stripped.intelligence.slideStoryboard?.map((s) => ({
+            ...s,
+            speakerNotes: ""
+          })),
+          sources: stripped.intelligence.sources?.map(({ excerpt: _e, ...s }) => ({
+            ...s,
+            excerpt: ""
+          })),
+        }
+      : undefined,
+  };
+
+  const json2 = JSON.stringify(trimmed);
+  if (json2.length <= GSHEETS_CELL_LIMIT) return trimmed;
+
+  // Absolute fallback: drop intelligence entirely (will be blank on re-read, but avoids a crash)
+  return { ...trimmed, intelligence: undefined };
+}
+
 export type SourcedFact = {
   title: string;
   url: string;

@@ -14,6 +14,7 @@ import type {
   QualificationDocumentKind,
   QualificationFiche
 } from "@/lib/aoTypes";
+import { ficheForGSheets } from "@/lib/aoTypes";
 
 export type DocumentInput = {
   name: string;
@@ -214,15 +215,8 @@ export async function saveQualificationV2(
   fiche.recommendation = recommendation;
   fiche.intelligence = intelligence;
 
-  // Strip raw extracted text before serializing to Google Sheets (50k char/cell limit).
-  const ficheForStorage = {
-    ...fiche,
-    documentExtract: "",
-    documents: fiche.documents?.map(({ text: _text, ...rest }) => rest),
-  };
-
   await aoRepository.upsertPipeline(ao, "BO", {
-    "Fiche qualification": JSON.stringify(ficheForStorage),
+    "Fiche qualification": JSON.stringify(ficheForGSheets(fiche)),
     Recommandation: fiche.recommendation,
     Notes: pipelineNotes
   });
