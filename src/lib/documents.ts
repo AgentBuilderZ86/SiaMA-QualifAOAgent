@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { ocrPdfBuffer } from "@/lib/ocr/pdfRasterOcr";
 import { recognizeImageBuffer } from "@/lib/ocr/tesseractOcr";
+import { extractWithPaddleOcr, paddleOcrConfigured } from "@/lib/ocr/paddleOcr";
 import type { QualificationDocumentExtraction, QualificationDocumentKind } from "@/lib/aoTypes";
 import {
   DOCUMENT_LIMITS,
@@ -322,9 +323,28 @@ async function runOcrFallback(buffer: Buffer, name: string, contentType: string)
     return { text: "", warning: "OCR désactivé (OCR_PROVIDER=none)." };
   }
 
+  if (provider === "paddle" || provider === "paddleocr") {
+    const paddle = await extractWithPaddleOcr(buffer, name, contentType);
+    if (paddle.text.trim()) return paddle;
+    // PaddleOCR configuré mais résultat vide → fallback Tesseract
+    const fallbackWarning = paddle.warning ? `${paddle.warning} ` : "";
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+    const type = contentType.toLowerCase();
+    const tesseract =
+      ext === "pdf" || type.includes("pdf")
+        ? await ocrPdfBuffer(buffer)
+        : await recognizeImageBuffer(buffer, name);
+    return { text: tesseract.text, warning: `${fallbackWarning}${tesseract.warning}`.trim() };
+  }
+
   if (provider === "azure" || provider === "azure-document-intelligence") {
     const azure = await extractWithAzureDocumentIntelligence(buffer, contentType);
     if (azure.text.trim()) return azure;
+    // Azure configuré mais résultat vide → essai PaddleOCR si disponible, sinon Tesseract
+    if (paddleOcrConfigured()) {
+      const paddle = await extractWithPaddleOcr(buffer, name, contentType);
+      if (paddle.text.trim()) return { text: paddle.text, warning: `${azure.warning} ${paddle.warning}`.trim() };
+    }
   }
 
   const ext = name.split(".").pop()?.toLowerCase() || "";
