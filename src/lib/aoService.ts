@@ -18,6 +18,7 @@ import {
   isServerlessRuntime,
   summarizeDocumentText
 } from "@/lib/documents";
+import { QUALIFICATION_BUDGET_MS } from "@/lib/constants";
 import { buildCvAdaptation, parseQualificationForCvScoring, type CvAdaptationResult, type UploadedCvForAdaptation } from "@/lib/cvScoring";
 import { extractKeyMetadata, isPlaceholderSection } from "@/lib/qualification/documentMetadata";
 import { filenameSignalsPrefix, parseFilenameSignals } from "@/lib/qualification/filenameSignals";
@@ -379,6 +380,7 @@ export async function decideOpportunityReassignment(
 }
 
 export async function saveQualification(aoNum: string, actor: string, formData: FormData) {
+  const pipelineStartMs = Date.now();
   const ao = await aoRepository.findAo(aoNum);
   if (!ao) throw new Error(`AO ${aoNum} introuvable.`);
 
@@ -488,8 +490,18 @@ export async function saveQualification(aoNum: string, actor: string, formData: 
     extractionEvidence
   };
   const serverless = isServerlessRuntime();
-  const llmTimeoutMs = serverless ? 14_000 : zipMode ? 18_000 : 0;
-  const recTimeoutMs = serverless ? 6_000 : zipMode ? 8_000 : 60_000;
+  const elapsedMs = Date.now() - pipelineStartMs;
+  const { recommendation: recBudget, intelligence: intBudget } = QUALIFICATION_BUDGET_MS;
+  const recTimeoutMs = serverless
+    ? recBudget.serverless
+    : zipMode
+      ? recBudget.zip
+      : recBudget.local;
+  const llmTimeoutMs = serverless
+    ? Math.max(0, intBudget.serverless - Math.max(0, elapsedMs - 10_000))
+    : zipMode
+      ? intBudget.zip
+      : intBudget.local;
 
   fiche.recommendation = "Analyse documentaire enregistrée — génération IA en cours.";
   fiche.intelligence = undefined;
