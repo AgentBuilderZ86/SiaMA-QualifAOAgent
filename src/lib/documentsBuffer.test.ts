@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { extractDocumentBufferWithOcr, extractUploadedDocuments, extractDocumentBuffer } from "@/lib/documents";
 
 describe("extractDocumentBuffer", () => {
