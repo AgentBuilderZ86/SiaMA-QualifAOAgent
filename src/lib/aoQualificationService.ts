@@ -160,8 +160,13 @@ export async function saveQualification(
     fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, false, {
       llmTimeoutMs: adaptiveIntMs
     });
+    const ficheForStorage1 = {
+      ...fiche,
+      documentExtract: "",
+      documents: fiche.documents?.map(({ text: _text, ...rest }) => rest),
+    };
     await aoRepository.upsertPipeline(ao, "BO", {
-      "Fiche qualification": JSON.stringify(fiche),
+      "Fiche qualification": JSON.stringify(ficheForStorage1),
       Recommandation: fiche.recommendation
     });
     // Fire-and-forget : appendHistory non bloquant pour tenir dans les 60 s Netlify
@@ -311,8 +316,13 @@ export async function saveQualification(
   fiche.recommendation = "Analyse documentaire enregistrée — génération IA en cours.";
   fiche.intelligence = undefined;
 
+  const ficheIntermediate = {
+    ...fiche,
+    documentExtract: "",
+    documents: fiche.documents?.map(({ text: _text, ...rest }) => rest),
+  };
   await aoRepository.upsertPipeline(ao, "BO", {
-    "Fiche qualification": JSON.stringify(fiche),
+    "Fiche qualification": JSON.stringify(ficheIntermediate),
     Recommandation: fiche.recommendation,
     Notes: pipelineNotes
   });
@@ -341,8 +351,13 @@ export async function saveQualification(
     llmTimeoutMs
   });
 
+  const ficheForStorage2 = {
+    ...fiche,
+    documentExtract: "",
+    documents: fiche.documents?.map(({ text: _text, ...rest }) => rest),
+  };
   await aoRepository.upsertPipeline(ao, "BO", {
-    "Fiche qualification": JSON.stringify(fiche),
+    "Fiche qualification": JSON.stringify(ficheForStorage2),
     Recommandation: fiche.recommendation,
     Notes: pipelineNotes
   });
