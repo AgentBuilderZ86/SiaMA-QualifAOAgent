@@ -576,12 +576,27 @@ export async function extractDocumentBufferWithOcr({
   };
 }
 
+const ALLOWED_UPLOAD_EXTENSIONS = new Set([
+  "pdf", "docx", "doc", "txt", "zip", "png", "jpg", "jpeg", "tif", "tiff"
+]);
+
 export async function extractUploadedDocument(file: File | null, kind: QualificationDocumentKind = "Autre"): Promise<ExtractedDocument> {
   if (!file || file.size === 0) {
     return { name: "", text: "", warning: "Aucun document transmis.", kind, extractionMode: "unreadable" };
   }
 
   const name = file.name;
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
+    return {
+      name,
+      text: "",
+      warning: `Extension .${ext || "inconnue"} non autorisée. Formats acceptés : PDF, DOCX, TXT, ZIP, images (PNG/JPG/TIF).`,
+      kind,
+      extractionMode: "unreadable"
+    };
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer());
   return extractDocumentBufferWithOcr({ name, buffer, contentType: file.type, kind });
 }

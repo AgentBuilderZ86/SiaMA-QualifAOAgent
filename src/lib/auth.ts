@@ -72,8 +72,20 @@ export async function clearSession() {
   store.delete(COOKIE_NAME);
 }
 
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  // Les longueurs différentes révèlent peu d'information dans ce contexte (outil interne,
+  // un seul compte). timingSafeEqual exige des buffers de même taille — on vérifie la longueur
+  // avant pour éviter l'exception, et on court-circuite de façon constante.
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 export function validateLogin(email: string, password: string) {
-  const expectedEmail = process.env["APP_USER_EMAIL"];
-  const expectedPassword = process.env["APP_USER_PASSWORD"];
-  return email === expectedEmail && password === expectedPassword;
+  const expectedEmail = process.env["APP_USER_EMAIL"] ?? "";
+  const expectedPassword = process.env["APP_USER_PASSWORD"] ?? "";
+  if (!expectedEmail || !expectedPassword) return false;
+  return timingSafeStringEqual(email.toLowerCase(), expectedEmail.toLowerCase()) &&
+    timingSafeStringEqual(password, expectedPassword);
 }
