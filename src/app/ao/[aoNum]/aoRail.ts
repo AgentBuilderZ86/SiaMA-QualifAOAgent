@@ -1,6 +1,6 @@
 import type { SideRailGroup, SideRailItem } from "@/components/shell";
 
-export type AoRailActive = "overview" | "qualification" | "proposal" | "atelier" | "pitch" | "closure";
+export type AoRailActive = "overview" | "qualification" | "qualification-v2" | "proposal" | "atelier" | "pitch" | "closure";
 
 export function buildAoRail(aoHref: string, active: AoRailActive, workflowStatut?: string): SideRailGroup[] {
   const showAtelier = workflowStatut === "BO" || workflowStatut === "P2P";
@@ -8,6 +8,7 @@ export function buildAoRail(aoHref: string, active: AoRailActive, workflowStatut
     { label: "📋 Vue d'ensemble", href: `/ao/${aoHref}`, active: active === "overview" },
     { label: "🔁 Réaffecter / statuer", href: `/ao/${aoHref}#pilotage-manager` },
     { label: "📑 Qualification", href: `/ao/${aoHref}/qualification`, active: active === "qualification" },
+    { label: "🚀 Qualification V2", href: `/ao/${aoHref}/qualification-v2`, active: active === "qualification-v2" },
     { label: "💰 Simulation & propale", href: `/ao/${aoHref}/proposal`, active: active === "proposal" }
   ];
   if (showAtelier) {
