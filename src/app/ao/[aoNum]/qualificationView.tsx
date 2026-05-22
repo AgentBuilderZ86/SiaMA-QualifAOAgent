@@ -187,12 +187,29 @@ export function QualificationIntelligenceView({
   if (!fiche) return <p className="muted">Aucune fiche qualification enregistrée.</p>;
 
   if (!intelligence) {
+    const isPartialSave = Boolean(fiche.recommendation?.includes("génération IA en cours"));
+    const qualifHref = ao ? `/ao/${encodeURIComponent(ao.aoNum)}/qualification?resumeAI=1` : null;
     return (
       <div className="info-grid">
-        <div className="alert">
-          Fiche ancienne : elle reste lisible, mais ne contient pas encore l’analyse IA enrichie. Relancer la qualification
-          intelligente pour obtenir le format Optorg V9.
+        <div className="alert" role={isPartialSave ? "alert" : "status"}>
+          {isPartialSave ? (
+            <>
+              <strong>Fiche partiellement enregistrée.</strong> L’extraction documentaire a été sauvegardée mais
+              l’analyse IA n’a pas pu terminer (délai Netlify dépassé). Cliquez sur{" "}
+              <em>Compléter l’analyse IA</em> pour relancer uniquement la phase LLM sans re-uploader les documents.
+            </>
+          ) : (
+            <>
+              Fiche ancienne : elle reste lisible, mais ne contient pas encore l’analyse IA enrichie. Relancer la
+              qualification intelligente pour obtenir le format Optorg V9.
+            </>
+          )}
         </div>
+        {qualifHref ? (
+          <a href={qualifHref} className="btn btn--accent" style={{ alignSelf: "flex-start" }}>
+            {isPartialSave ? "Compléter l’analyse IA (documents déjà sauvegardés)" : "Relancer la qualification intelligente"}
+          </a>
+        ) : null}
         <div className="info-item">
           <span>Contexte</span>
           <p>{fiche.contexte || "Non renseigné"}</p>

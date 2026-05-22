@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const questions = [
   ["contexte", "Contexte métier et enjeux stratégiques"],
@@ -32,44 +32,101 @@ const PIPELINE_STAGES = [
   "Enregistrement…",
 ] as const;
 
+// Durées estimées par étape (ms) — sert à positionner la barre de progression
 const STAGE_DURATIONS_MS = [4_000, 20_000, 10_000, 30_000, 4_000];
+const TOTAL_DURATION_MS = STAGE_DURATIONS_MS.reduce((s, d) => s + d, 0);
 
-function useProgressStage(pending: boolean) {
+function stageCumulativeMs(index: number) {
+  return STAGE_DURATIONS_MS.slice(0, index).reduce((s, d) => s + d, 0);
+}
+
+function stageProgressPercent(index: number) {
+  return Math.round((stageCumulativeMs(index) / TOTAL_DURATION_MS) * 100);
+}
+
+function useProgressState(pending: boolean) {
   const [stageIndex, setStageIndex] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
-  useState(() => {
+  useEffect(() => {
     if (!pending) {
       setStageIndex(0);
+      setElapsed(0);
       return;
     }
-    let current = 0;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    let elapsed = 0;
-    for (let i = 0; i < PIPELINE_STAGES.length - 1; i++) {
-      elapsed += STAGE_DURATIONS_MS[i] ?? 4_000;
-      const capture = i + 1;
-      timers.push(setTimeout(() => setStageIndex(capture), elapsed));
-    }
-    return () => timers.forEach(clearTimeout);
-  });
 
-  return pending ? (PIPELINE_STAGES[stageIndex] ?? PIPELINE_STAGES[0]) : null;
+    const startTime = Date.now();
+    const elapsedTimer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+    }, 1_000);
+
+    const stageTimers: ReturnType<typeof setTimeout>[] = [];
+    let cumulativeMs = 0;
+    for (let i = 0; i < PIPELINE_STAGES.length - 1; i++) {
+      cumulativeMs += STAGE_DURATIONS_MS[i] ?? 4_000;
+      const capture = i + 1;
+      stageTimers.push(setTimeout(() => setStageIndex(capture), cumulativeMs));
+    }
+
+    return () => {
+      clearInterval(elapsedTimer);
+      stageTimers.forEach(clearTimeout);
+    };
+  }, [pending]);
+
+  return {
+    stage: pending ? (PIPELINE_STAGES[stageIndex] ?? PIPELINE_STAGES[0]) : null,
+    percent: stageProgressPercent(stageIndex),
+    elapsed,
+  };
+}
+
+function errorKind(msg: string): "timeout" | "auth" | "empty" | "generic" {
+  if (msg.includes("Délai serveur") || msg.includes("timeout") || msg.includes("504") || msg.includes("502")) return "timeout";
+  if (msg.includes("session") || msg.includes("connexion") || msg.includes("401")) return "auth";
+  if (msg.includes("Ajoutez au moins un document") || msg.includes("corpus")) return "empty";
+  return "generic";
 }
 
 export function QualificationForm({
   aoNum,
   hasSourceUrl,
-  initialError = ""
+  initialError = "",
+  resumeAI = false
 }: {
   aoNum: string;
   hasSourceUrl: boolean;
   initialError?: string;
+  resumeAI?: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(initialError);
   const [partialSave, setPartialSave] = useState(false);
-  const currentStage = useProgressStage(pending);
+  const formRef = useRef<HTMLFormElement>(null);
+  const { stage: currentStage, percent, elapsed } = useProgressState(pending);
+
+  // Nettoie ?qualError= et ?resumeAI= de l'URL dès l'affichage (URL propre)
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("qualError") || url.searchParams.has("resumeAI")) {
+      url.searchParams.delete("qualError");
+      url.searchParams.delete("resumeAI");
+      router.replace(url.pathname + (url.search || ""), { scroll: false });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // En mode resumeAI, soumet automatiquement avec forceDocumentExtraction désactivé
+  const hasAutoSubmitted = useRef(false);
+  useEffect(() => {
+    if (!resumeAI || hasAutoSubmitted.current || !formRef.current) return;
+    hasAutoSubmitted.current = true;
+    const cb = formRef.current.elements.namedItem("forceDocumentExtraction") as HTMLInputElement | null;
+    if (cb) cb.checked = false;
+    formRef.current.requestSubmit();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeAI]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -120,26 +177,58 @@ export function QualificationForm({
     }
   }
 
+  const kind = error ? errorKind(error) : null;
+
   return (
-    <form onSubmit={handleSubmit} className="card section form-grid qualification-form">
+    <form ref={formRef} onSubmit={handleSubmit} className="card section form-grid qualification-form">
       <input type="hidden" name="aoNum" value={aoNum} />
 
       {error ? (
         <div className="alert" role="alert">
-          {partialSave ? (
-            <>
-              <strong>Sauvegarde partielle effectuée.</strong>{" "}
-            </>
-          ) : null}
+          {partialSave ? <strong>Sauvegarde partielle effectuée. </strong> : null}
           {error}
+          {kind === "timeout" ? (
+            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => {
+                  setError("");
+                  setPartialSave(false);
+                  // Décoche forceDocumentExtraction pour ne relancer que le LLM
+                  if (formRef.current) {
+                    const cb = formRef.current.elements.namedItem("forceDocumentExtraction") as HTMLInputElement | null;
+                    if (cb) cb.checked = false;
+                  }
+                  formRef.current?.requestSubmit();
+                }}
+              >
+                Relancer l’analyse IA (documents déjà sauvegardés)
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={() => { setError(""); setPartialSave(false); }}>
+                Réessayer depuis le début
+              </button>
+            </div>
+          ) : kind === "auth" ? (
+            <div style={{ marginTop: 8 }}>
+              <a href="/login" className="btn btn--ghost">Reconnecter</a>
+            </div>
+          ) : kind === "generic" ? (
+            <div style={{ marginTop: 8 }}>
+              <button type="button" className="btn btn--ghost" onClick={() => { setError(""); setPartialSave(false); }}>
+                Réessayer
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       <div className="qualification-progress" role="status" aria-live="polite">
         {currentStage ? (
           <>
-            <strong>Génération en cours…</strong>
+            <strong>Génération en cours… {elapsed > 0 ? `(${elapsed} s)` : ""}</strong>
             <span>{currentStage} Ne fermez pas l’onglet.</span>
+            <progress value={percent} max={100} style={{ width: "100%", marginTop: 6, height: 6 }} />
           </>
         ) : (
           <>
