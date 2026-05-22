@@ -13,13 +13,25 @@ function maxOcrPages() {
   return 4;
 }
 
-export async function ocrPdfBuffer(buffer: Buffer): Promise<{ text: string; warning: string }> {
+export type OcrPdfOptions = { documentKind?: string };
+
+function resolvePdfPageLimit(buffer: Buffer, documentKind?: string) {
+  const configured = Number(process.env.AO_OCR_MAX_PDF_PAGES || "");
+  if (Number.isFinite(configured) && configured > 0) return Math.min(configured, 10);
+  const serverless =
+    process.env.NETLIFY === "true" || process.env.NETLIFY === "1" || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+  if (documentKind === "RC") return serverless ? 4 : 6;
+  if (documentKind === "Avis") return serverless ? 2 : 4;
+  if (documentKind === "CPS" && buffer.length > 700_000) return 1;
+  return maxOcrPages();
+}
+
+export async function ocrPdfBuffer(buffer: Buffer, options: OcrPdfOptions = {}): Promise<{ text: string; warning: string }> {
   if (!buffer.length) return { text: "", warning: "PDF vide." };
 
   const warnings: string[] = [];
   const parts: string[] = [];
-  const pageLimit =
-    buffer.length > 900_000 ? 1 : maxOcrPages();
+  const pageLimit = resolvePdfPageLimit(buffer, options.documentKind);
 
   try {
     const doc = await getDocument({
