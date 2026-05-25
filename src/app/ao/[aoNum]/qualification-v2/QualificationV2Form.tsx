@@ -125,7 +125,12 @@ export function QualificationV2Form({
         body: fd,
         credentials: "include"
       });
-      const data: ApiExtractResponse = await res.json();
+      const data: ApiExtractResponse = await res.json().catch(() => ({
+        text: "",
+        warning: res.status === 504 || res.status === 502
+          ? "Délai dépassé lors de l'extraction. Pour les PDFs scannés volumineux, collez le texte clé dans la zone ci-dessous."
+          : `Erreur serveur (${res.status}). Collez le texte clé dans la zone ci-dessous.`
+      }));
       setDocs((prev) => ({
         ...prev,
         [kind]: {

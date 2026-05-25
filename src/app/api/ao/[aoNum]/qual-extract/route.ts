@@ -60,7 +60,12 @@ export async function POST(
     const isScanned = !result.text.trim() && isPdf;
 
     if (isScanned) {
-      const visionText = await extractPdfTextVision(buffer).catch(() => null);
+      // Race contre le timeout Netlify (60s max) — on laisse 45s à Claude Vision
+      const VISION_TIMEOUT_MS = 45_000;
+      const visionText = await Promise.race([
+        extractPdfTextVision(buffer).catch(() => null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), VISION_TIMEOUT_MS))
+      ]);
       if (visionText) {
         return NextResponse.json({
           text: visionText,
@@ -70,10 +75,10 @@ export async function POST(
           extractionMode: "ocr"
         });
       }
-      // Vision not available or failed — guide user to paste manually
+      // Vision non disponible, échouée ou timeout — guider l'utilisateur
       return NextResponse.json({
         text: "",
-        warning: "PDF scanné ou sans texte natif. ANTHROPIC_API_KEY non configurée ou extraction IA indisponible. Collez le texte clé dans la zone ci-dessous.",
+        warning: "PDF scanné : extraction IA indisponible ou délai dépassé. Collez le texte clé dans la zone ci-dessous.",
         kind: result.kind ?? kind,
         ocrUsed: false,
         extractionMode: "unreadable"
