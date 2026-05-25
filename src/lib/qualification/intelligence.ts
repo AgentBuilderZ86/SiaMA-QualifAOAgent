@@ -946,7 +946,12 @@ async function callQualificationLlm(
                 duration: "string",
                 deadline: "string",
                 submission: "string",
-                budget: "string"
+                budget: "string",
+                filiales: "string, filiales ou périmètre géographique des entités concernées",
+                ecosystemeSI: "string, outils SI mentionnés dans le document (SAP, CRM, ERP, etc.)",
+                contacts: "string, emails ou noms des personnes contact pour la soumission",
+                mailSubject: "string, objet mail imposé pour la soumission si mentionné",
+                confidentiality: "string, NDA ou clause de confidentialité mentionnée"
               },
               clientContext: "string, analyse LLM du contexte client à partir du document chargé ; citer À confirmer si absent du document",
               businessIssues: ["4-6 enjeux métier générés par LLM depuis les besoins, objectifs, contraintes et critères du document chargé"],
