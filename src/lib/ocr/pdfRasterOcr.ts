@@ -12,7 +12,8 @@ try {
   // Si la résolution échoue, ocrPdfBuffer catchera l'erreur pdfjs localement
 }
 
-const RENDER_SCALE = 1.4;
+// 2.5 → ~180 DPI — meilleure reconnaissance Tesseract sur scans basse résolution
+const RENDER_SCALE = 2.5;
 
 function maxOcrPages() {
   const configured = Number(process.env.AO_OCR_MAX_PDF_PAGES || "");

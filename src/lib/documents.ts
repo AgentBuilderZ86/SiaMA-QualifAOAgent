@@ -350,9 +350,20 @@ async function runOcrFallback(buffer: Buffer, name: string, contentType: string)
   const ext = name.split(".").pop()?.toLowerCase() || "";
   const type = contentType.toLowerCase();
   if (ext === "pdf" || type.includes("pdf")) {
-    return ocrPdfBuffer(buffer);
+    const tesseract = await ocrPdfBuffer(buffer);
+    // pdfjs ne décode pas JBIG2 — si Tesseract retourne vide, tenter EasyOCR si disponible
+    if (!tesseract.text.trim() && paddleOcrConfigured()) {
+      const paddle = await extractWithPaddleOcr(buffer, name, contentType);
+      if (paddle.text.trim()) return { text: paddle.text, warning: tesseract.warning || paddle.warning };
+    }
+    return tesseract;
   }
-  return recognizeImageBuffer(buffer, name);
+  const tesseract = await recognizeImageBuffer(buffer, name);
+  if (!tesseract.text.trim() && paddleOcrConfigured()) {
+    const paddle = await extractWithPaddleOcr(buffer, name, contentType);
+    if (paddle.text.trim()) return { text: paddle.text, warning: tesseract.warning || paddle.warning };
+  }
+  return tesseract;
 }
 
 async function extractZipBuffer(buffer: Buffer, outerName: string): Promise<ExtractedDocument> {
