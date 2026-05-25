@@ -490,6 +490,30 @@ export const DEFAULT_REFERENTIELS: ReferentielItem[] = [
     active: "TRUE"
   },
   {
+    type: "TJM",
+    name: "Directeur / Partner",
+    value: "9500",
+    unit: "DH HT/jour",
+    source: "Référentiel interne Sia Maroc à valider par Finance",
+    active: "TRUE"
+  },
+  {
+    type: "TJM",
+    name: "Expert Externe",
+    value: "7500",
+    unit: "DH HT/jour",
+    source: "Référentiel interne Sia Maroc — expert externe facturation client",
+    active: "TRUE"
+  },
+  {
+    type: "TJM",
+    name: "Expert Externe (coût achat)",
+    value: "5500",
+    unit: "DH HT/jour",
+    source: "Référentiel interne Sia Maroc — expert externe coût d'achat",
+    active: "TRUE"
+  },
+  {
     type: "FISCAL",
     name: "TVA Maroc standard",
     value: "20",

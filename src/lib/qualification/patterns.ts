@@ -174,6 +174,97 @@ export const GO_PATTERNS: GoPatternDefinition[] = [
     score: 2,
     manager: "TERCHOUNE ILIASS",
     reason: "Pattern Régulation — Iliass"
+  },
+  {
+    id: "esg-rse",
+    keywords: ["esg", "rse", "responsabilite societale", "responsabilité sociétale", "durabilite", "durabilité", "reporting extra-financier", "taxonomie ue"],
+    score: 2,
+    manager: "RHOUNI FARAH",
+    reason: "Pattern ESG / RSE — Rhouni Farah"
+  },
+  {
+    id: "processus-achats",
+    keywords: ["processus achats", "optimisation achats", "sourcing strategique", "sourcing stratégique", "gestion des fournisseurs", "performance achats"],
+    score: 2,
+    manager: "ARHMIR GHITA",
+    reason: "Pattern Achats / Supply — Ghita"
+  },
+  {
+    id: "pilotage-kpi",
+    keywords: ["pilotage", "tableau de bord", "kpi", "indicateurs de performance", "scorecard", "balanced scorecard"],
+    score: 2,
+    manager: "ARHMIR GHITA",
+    reason: "Pattern Pilotage / KPI — Ghita"
+  },
+  {
+    id: "pmo-gouvernance",
+    keywords: ["pmo", "project management office", "portefeuille projets", "gouvernance de projet", "programme de transformation"],
+    score: 2,
+    manager: "ARHMIR GHITA",
+    reason: "Pattern PMO / Gouvernance projets — Ghita"
+  },
+  {
+    id: "energie-transition",
+    keywords: ["transition energetique", "transition énergétique", "efficacite energetique", "efficacité énergétique", "energie renouvelable", "énergie renouvelable", "masen", "onee"],
+    score: 2,
+    manager: "ARHMIR GHITA",
+    reason: "Pattern Énergie / Transition — Ghita"
+  },
+  {
+    id: "pca-continuite",
+    keywords: ["plan de continuite", "plan de continuité", "pca", "pra", "business continuity", "gestion de crise", "resilience"],
+    score: 2,
+    manager: "ZRIOUIL ADIL",
+    reason: "Pattern PCA / Continuité d'activité — Zriouil"
+  },
+  {
+    id: "experience-client",
+    keywords: ["experience client", "expérience client", "cx", "parcours client", "customer journey", "satisfaction client", "nps"],
+    score: 2,
+    manager: "ZRIOUIL ADIL",
+    reason: "Pattern CX / Expérience client — Zriouil"
+  },
+  {
+    id: "emploi-insertion",
+    keywords: ["emploi", "insertion professionnelle", "marche du travail", "marché du travail", "promotion de l'emploi", "employabilite", "employabilité"],
+    score: 2,
+    manager: "AL ALAMI HOUDA",
+    reason: "Pattern Emploi / Insertion — Al Alami Houda"
+  },
+  {
+    id: "assistance-technique",
+    keywords: ["assistance technique", "at ", "expert resident", "expert résident", "délégation de compétences"],
+    score: 2,
+    manager: "TERCHOUNE ILIASS",
+    reason: "Pattern Assistance Technique — Terchoune Iliass"
+  },
+  {
+    id: "audit-organisationnel",
+    keywords: ["audit organisationnel", "diagnostic organisationnel", "restructuration", "reorganisation", "réorganisation", "organigramme"],
+    score: 2,
+    manager: "AL ALAMI HOUDA",
+    reason: "Pattern Audit Org / Restructuration — Houda"
+  },
+  {
+    id: "marketing-communication",
+    keywords: ["strategie marketing", "stratégie marketing", "plan de communication", "marque employeur", "brand management", "digital marketing"],
+    score: 1,
+    manager: "ZRIOUIL ADIL",
+    reason: "Pattern Marketing / Communication — Zriouil"
+  },
+  {
+    id: "finance-controle",
+    keywords: ["controle de gestion", "contrôle de gestion", "reporting financier", "consolidation financiere", "consolidation financière", "modelisation financiere", "modélisation financière"],
+    score: 2,
+    manager: "TERCHOUNE ILIASS",
+    reason: "Pattern Finance / Contrôle de gestion — Iliass"
+  },
+  {
+    id: "juridique-conformite",
+    keywords: ["conformite reglementaire", "conformité réglementaire", "compliance", "protection des donnees", "protection des données", "rgpd", "loi 09-08"],
+    score: 2,
+    manager: "TERCHOUNE ILIASS",
+    reason: "Pattern Juridique / Conformité — Iliass"
   }
 ];
 
@@ -208,6 +299,53 @@ export const NOGO_PATTERNS: NogoPatternDefinition[] = [
     keywords: ["developpement d'un site web", "développement d'un site web", "site web institutionnel"],
     reason: "WATCH — dev web standard",
     isWatch: true
+  },
+  {
+    id: "btp-construction",
+    keywords: ["batiment", "bâtiment", "genie civil", "génie civil", "construction", "travaux publics", "btp", "architecte", "maîtrise d'œuvre"],
+    reason: "NO GO — BTP / Génie civil hors périmètre conseil"
+  },
+  {
+    id: "agrements-specifiques",
+    keywords: ["agrement d13", "agrément d13", "bureau d'etudes agréé", "bureau d'études agréé", "agreation", "agrément technique"],
+    reason: "NO GO — Agréments techniques spécifiques requis"
+  },
+  {
+    id: "langue-amazighe",
+    keywords: ["langue amazighe", "tamazight", "tifinagh"],
+    reason: "NO GO — Compétence amazighe hors capacité"
+  },
+  {
+    id: "agroalimentaire-terrain",
+    keywords: ["controle qualite alimentaire", "contrôle qualité alimentaire", "agroalimentaire terrain", "inspection sanitaire", "veterinaire"],
+    reason: "NO GO — Expertise agro / terrain hors périmètre"
+  },
+  {
+    id: "handling-logistique",
+    keywords: ["handling", "manutention", "logistique operationnelle", "logistique opérationnelle", "gestion d'entrepot", "gestion d'entrepôt"],
+    reason: "NO GO — Handling / Logistique opérationnelle hors offre"
+  },
+  {
+    id: "tracabilite-terrain",
+    keywords: ["tracabilite physique", "traçabilité physique", "rfid deploiement", "déploiement rfid", "inventaire physique terrain"],
+    reason: "NO GO — Traçabilité terrain / RFID opérationnel hors périmètre"
+  },
+  {
+    id: "groupement-interdit",
+    keywords: ["groupement interdit", "offre individuelle uniquement", "soumissionnaire unique obligatoire"],
+    reason: "WATCH — Groupement interdit, vérifier capacité solo",
+    isWatch: true
+  },
+  {
+    id: "social-terrain",
+    keywords: ["accompagnement social terrain", "mediation sociale", "animation communautaire", "travailleur social"],
+    reason: "NO GO — Travail social / Médiation terrain hors périmètre"
+  },
+  {
+    id: "environnement-terrain",
+    keywords: ["etude d'impact environnemental", "étude d'impact environnemental", "eia", "analyse cycle de vie produit", "bureau d'etudes environnemental"],
+    reason: "WATCH — EIE / Environnement terrain — vérifier compétences",
+    isWatch: true
   }
 ];
 
@@ -224,7 +362,22 @@ export const STRATEGIC_CLIENTS = [
   "undp",
   "banque mondiale",
   "ades",
-  "mca"
+  "mca",
+  "iam",
+  "itissalat al maghrib",
+  "awb",
+  "cnss",
+  "onda",
+  "cosumar",
+  "nareva",
+  "tmsa",
+  "anre",
+  "bcp",
+  "banque centrale populaire",
+  "ministere de l'economie",
+  "ministère de l'économie",
+  "ministere des finances",
+  "ministère des finances"
 ];
 
 const MAX_PATTERN_SCORE = 15;

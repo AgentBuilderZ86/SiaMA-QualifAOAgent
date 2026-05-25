@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { extractPdfTextVision } from "@/lib/llmChat";
 import { logger } from "@/lib/logger";
+import { detectDocumentSignals } from "@/lib/documents";
 import type { QualificationDocumentKind } from "@/lib/aoTypes";
 
 export const dynamic = "force-dynamic";
@@ -95,7 +96,8 @@ export async function POST(
         warning: text ? "" : "Fichier texte vide.",
         kind,
         ocrUsed: false,
-        extractionMode: text ? "native" : "unreadable"
+        extractionMode: text ? "native" : "unreadable",
+        signals: detectDocumentSignals(text)
       });
     }
 
@@ -110,10 +112,11 @@ export async function POST(
           warning: text ? "" : "DOCX sans contenu texte lisible.",
           kind,
           ocrUsed: false,
-          extractionMode: text ? "native" : "unreadable"
+          extractionMode: text ? "native" : "unreadable",
+          signals: detectDocumentSignals(text)
         });
       } catch {
-        return NextResponse.json({ text: "", warning: "Erreur extraction DOCX.", kind, ocrUsed: false, extractionMode: "unreadable" });
+        return NextResponse.json({ text: "", warning: "Erreur extraction DOCX.", kind, ocrUsed: false, extractionMode: "unreadable", signals: detectDocumentSignals("") });
       }
     }
 
@@ -131,7 +134,8 @@ export async function POST(
         warning: "",
         kind,
         ocrUsed: false,
-        extractionMode: nativeText.trim() ? "native" : "unreadable"
+        extractionMode: nativeText.trim() ? "native" : "unreadable",
+        signals: detectDocumentSignals(nativeText)
       });
     }
 
@@ -159,7 +163,8 @@ export async function POST(
         warning: `PDF scanné — texte extrait par analyse IA (Claude vision)${pageNote}.`,
         kind,
         ocrUsed: true,
-        extractionMode: "ocr"
+        extractionMode: "ocr",
+        signals: detectDocumentSignals(visionText)
       });
     }
 
@@ -168,7 +173,8 @@ export async function POST(
       warning: "PDF scanné : extraction IA indisponible ou délai dépassé. Collez le texte clé dans la zone ci-dessous.",
       kind,
       ocrUsed: false,
-      extractionMode: "unreadable"
+      extractionMode: "unreadable",
+      signals: detectDocumentSignals("")
     });
 
   } catch (error) {
