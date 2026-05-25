@@ -23,15 +23,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ aoN
 
     const result = await saveQualification(aoNum, actor, formData);
 
-    const aoPath = pathFor(aoNum);
-    const qualificationPath = `${aoPath}/qualification`;
-    revalidatePath("/dashboard");
-    revalidatePath(aoPath);
-    revalidatePath(qualificationPath);
-
+    // L'étape "extract" retourne sans appels LLM — on évite le coût revalidatePath
+    // (~1-3 s sur Netlify) avant le retour partiel pour tenir dans le budget de 60 s.
     if (typeof result === "object" && "extractOnly" in result) {
       return NextResponse.json({ ok: true as const, nextStage: "analyze" as const });
     }
+
+    const aoPath = pathFor(aoNum);
+    revalidatePath("/dashboard");
+    revalidatePath(aoPath);
+    revalidatePath(`${aoPath}/qualification`);
     return NextResponse.json({ ok: true as const, redirectTo: aoPath });
   } catch (error) {
     const message =

@@ -195,8 +195,13 @@ export async function saveQualification(
   const previousDocuments = existingFiche?.documents?.length
     ? existingFiche.documents
     : legacyDocumentFromFiche(existingFiche);
+  // Si les documents frais sont tous vides (OCR échoué), on revient sur les précédents
+  // sauf si l'utilisateur force explicitement la ré-extraction.
+  const freshHaveContent = freshDocuments.some((d) => d.text.trim());
   const documents =
-    freshDocuments.length || forceDocumentExtraction ? freshDocuments : previousDocuments;
+    (freshDocuments.length && freshHaveContent) || forceDocumentExtraction
+      ? freshDocuments
+      : previousDocuments;
   const documentName = documents.map((document) => document.name).filter(Boolean).join(", ");
   const filenameSignals = documents.reduce(
     (acc, document) => ({ ...acc, ...parseFilenameSignals(document.name || "") }),

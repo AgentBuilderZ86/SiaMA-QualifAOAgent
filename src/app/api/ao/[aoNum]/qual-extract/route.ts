@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { extractPdfTextVision } from "@/lib/llmChat";
 import { logger } from "@/lib/logger";
 import { detectDocumentSignals } from "@/lib/documents";
+import { DOCUMENT_LIMITS } from "@/lib/constants";
 import type { QualificationDocumentKind } from "@/lib/aoTypes";
 
 export const dynamic = "force-dynamic";
@@ -126,7 +127,7 @@ export async function POST(
       nativeText = await extractNativePdfText(buffer);
     }
 
-    const isScanned = isPdf && nativeText.length < 180;
+    const isScanned = isPdf && nativeText.length < DOCUMENT_LIMITS.minTextCharsBeforeOcr;
 
     if (!isScanned) {
       return NextResponse.json({

@@ -718,14 +718,18 @@ export async function extractUploadedDocuments(formData: FormData): Promise<Qual
     let ocrRuns = 0;
     for (const target of ocrTargets) {
       if (ocrRuns >= maxOcrRuns) break;
-      const ocr = await extractDocumentBufferWithOcr({
-        name: target.file.name,
-        buffer: target.buffer,
-        contentType: target.file.type,
-        kind: target.kind
-      });
+      // Appel direct à runOcrFallback : le buffer natif est déjà disponible dans results[target.index],
+      // évite la double extraction native qu'effectuerait extractDocumentBufferWithOcr.
+      const ocr = await runOcrFallback(target.buffer, target.file.name, target.file.type);
       if (ocr.text.trim() || ocr.warning) {
-        results[target.index] = ocr;
+        const base = results[target.index];
+        results[target.index] = {
+          ...base,
+          text: ocr.text.trim() ? ocr.text.slice(0, MAX_EXTRACT_CHARS) : base.text,
+          warning: [base.warning, ocr.warning].filter(Boolean).join(" "),
+          extractionMode: ocr.text.trim() ? ("ocr" as const) : base.extractionMode,
+          ocrUsed: Boolean(ocr.text.trim())
+        };
         ocrRuns += 1;
       }
     }
