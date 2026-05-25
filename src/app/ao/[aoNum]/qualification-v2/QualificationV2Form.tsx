@@ -77,7 +77,10 @@ function statusBadge(doc: DocState): { label: string; color: "green" | "orange" 
   if (doc.extracting) return { label: "Extraction en cours…", color: "gray" };
   if (!doc.text && !doc.file) return { label: "Aucun document", color: "gray" };
   if (!doc.text && doc.file) {
-    return { label: "⚠ PDF scanné — collez le texte dans la zone ci-dessous", color: "orange" };
+    const isPdf = doc.file.name.toLowerCase().endsWith(".pdf");
+    return isPdf
+      ? { label: "⚠ PDF scanné — collez le texte dans la zone ci-dessous", color: "orange" }
+      : { label: "⚠ Document sans texte lisible — collez le texte ci-dessous", color: "orange" };
   }
   if (doc.ocrUsed) {
     return { label: `✓ Lecture IA (vision) — ${doc.text.length.toLocaleString()} car.`, color: "green" };
