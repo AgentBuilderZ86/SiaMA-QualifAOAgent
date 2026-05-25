@@ -24,7 +24,7 @@ pnpm-debug.log*
 # Artefacts locaux (générés / exports) et cache Python — hors dépôt (scan Netlify + taille)
 output/
 scripts/__pycache__/
-paddle_ocr_service/.venv/
+paddle_ocr_service/.venv
 paddle_ocr_service/__pycache__/
 
 # Fichiers temporaires Office (verrou)
