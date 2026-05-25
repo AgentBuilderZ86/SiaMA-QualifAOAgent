@@ -1,7 +1,4 @@
 import crypto from "node:crypto";
-import { ocrPdfBuffer } from "@/lib/ocr/pdfRasterOcr";
-import { recognizeImageBuffer } from "@/lib/ocr/tesseractOcr";
-import { extractWithPaddleOcr, paddleOcrConfigured } from "@/lib/ocr/paddleOcr";
 import type { QualificationDocumentExtraction, QualificationDocumentKind } from "@/lib/aoTypes";
 import {
   DOCUMENT_LIMITS,
@@ -322,6 +319,13 @@ async function runOcrFallback(buffer: Buffer, name: string, contentType: string)
   if (provider === "none") {
     return { text: "", warning: "OCR désactivé (OCR_PROVIDER=none)." };
   }
+
+  // Imports dynamiques — évite de charger @napi-rs/canvas (addon natif) à l'init du module
+  const [{ ocrPdfBuffer }, { recognizeImageBuffer }, { extractWithPaddleOcr, paddleOcrConfigured }] = await Promise.all([
+    import("@/lib/ocr/pdfRasterOcr"),
+    import("@/lib/ocr/tesseractOcr"),
+    import("@/lib/ocr/paddleOcr")
+  ]);
 
   if (provider === "paddle" || provider === "paddleocr") {
     const paddle = await extractWithPaddleOcr(buffer, name, contentType);
