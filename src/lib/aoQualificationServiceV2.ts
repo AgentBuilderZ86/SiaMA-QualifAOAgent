@@ -221,9 +221,10 @@ export async function saveQualificationV2(
   fiche.intelligence = intelligence;
   remapFicheFromIntelligence(fiche);
 
+  const SHEETS_CELL_MAX = 49_000;
   await aoRepository.upsertPipeline(ao, "BO", {
     "Fiche qualification": JSON.stringify(ficheForGSheets(fiche)),
-    Recommandation: fiche.recommendation,
+    Recommandation: (fiche.recommendation ?? "").slice(0, SHEETS_CELL_MAX),
     Notes: pipelineNotes
   });
 

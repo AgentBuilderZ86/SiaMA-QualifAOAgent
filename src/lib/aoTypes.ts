@@ -189,8 +189,24 @@ export function ficheForGSheets(fiche: QualificationFiche): QualificationFiche {
   const json2 = JSON.stringify(trimmed);
   if (json2.length <= GSHEETS_CELL_LIMIT) return trimmed;
 
-  // Absolute fallback: drop intelligence entirely (will be blank on re-read, but avoids a crash)
-  return { ...trimmed, intelligence: undefined };
+  // Drop intelligence entirely
+  const noIntel: QualificationFiche = { ...trimmed, intelligence: undefined };
+  const json3 = JSON.stringify(noIntel);
+  if (json3.length <= GSHEETS_CELL_LIMIT) return noIntel;
+
+  // Final fallback: truncate the largest LLM-generated text fields to fit within the cell limit
+  return {
+    ...noIntel,
+    contexte: noIntel.contexte.slice(0, 800),
+    perimetre: noIntel.perimetre.slice(0, 800),
+    profils: noIntel.profils.slice(0, 800),
+    livrables: noIntel.livrables.slice(0, 400),
+    criteres: noIntel.criteres.slice(0, 400),
+    risques: noIntel.risques.slice(0, 400),
+    chances: noIntel.chances.slice(0, 400),
+    recommendation: noIntel.recommendation.slice(0, 400),
+    pointsVigilance: noIntel.pointsVigilance?.slice(0, 5) ?? [],
+  };
 }
 
 export type SourcedFact = {

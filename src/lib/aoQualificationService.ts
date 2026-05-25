@@ -162,9 +162,10 @@ export async function saveQualification(
       llmTimeoutMs: adaptiveIntMs
     });
     remapFicheFromIntelligence(fiche);
+    const SHEETS_CELL_MAX = 49_000;
     await aoRepository.upsertPipeline(ao, "BO", {
       "Fiche qualification": JSON.stringify(ficheForGSheets(fiche)),
-      Recommandation: fiche.recommendation
+      Recommandation: (fiche.recommendation ?? "").slice(0, SHEETS_CELL_MAX)
     });
     // Fire-and-forget : appendHistory non bloquant pour tenir dans les 60 s Netlify
     void aoRepository.appendHistory({
@@ -314,9 +315,10 @@ export async function saveQualification(
   fiche.recommendation = "Analyse documentaire enregistrée — génération IA en cours.";
   fiche.intelligence = undefined;
 
+  const SHEETS_CELL_MAX = 49_000;
   await aoRepository.upsertPipeline(ao, "BO", {
     "Fiche qualification": JSON.stringify(ficheForGSheets(fiche)),
-    Recommandation: fiche.recommendation,
+    Recommandation: (fiche.recommendation ?? "").slice(0, SHEETS_CELL_MAX),
     Notes: pipelineNotes
   });
 
@@ -348,7 +350,7 @@ export async function saveQualification(
 
   await aoRepository.upsertPipeline(ao, "BO", {
     "Fiche qualification": JSON.stringify(ficheForGSheets(fiche)),
-    Recommandation: fiche.recommendation,
+    Recommandation: (fiche.recommendation ?? "").slice(0, SHEETS_CELL_MAX),
     Notes: pipelineNotes
   });
   await aoRepository.appendHistory({
