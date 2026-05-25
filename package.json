@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently -n next,ocr -c blue,green \"next dev\" \"npm run ocr:start\"",
+    "ocr:start": "paddle_ocr_service/start.sh",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -35,6 +36,7 @@
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "concurrently": "^9.2.1",
     "netlify-cli": "^26.0.1",
     "typescript": "latest",
     "vitest": "^2.1.9"
