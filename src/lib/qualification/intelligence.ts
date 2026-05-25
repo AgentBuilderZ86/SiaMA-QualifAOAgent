@@ -21,11 +21,12 @@ import type {
   QualificationNextStep,
   SourcedFact
 } from "@/lib/aoTypes";
-import type { ReferentielItem } from "@/lib/aoTypes";
+import type { ReferentielItem, QualificationDocumentKind } from "@/lib/aoTypes";
 import type { PatternScoreResult } from "@/lib/qualification/patterns";
 import { scoreAoFromPatterns } from "@/lib/qualification/patterns";
 import { researchQualificationContext } from "@/lib/qualification/research";
 import { isServerlessRuntime } from "@/lib/documents";
+import type { DocumentSignals, DocumentSections } from "@/lib/documents";
 import { completeChat, hasConfiguredLlm } from "@/lib/llmChat";
 
 function text(value: unknown, fallback = "À confirmer") {
@@ -897,12 +898,20 @@ function normalizeIntelligence(
   return { ...base, pptCopyBlock: text(raw.pptCopyBlock, buildPptCopyBlock(base)) };
 }
 
+type PerDocSection = {
+  kind: QualificationDocumentKind;
+  name: string;
+  sections: DocumentSections;
+  signals: DocumentSignals;
+};
+
 async function callQualificationLlm(
   ao: AoRecord,
   fiche: QualificationFiche,
   sources: SourcedFact[],
   referentials: ReferentielItem[],
-  patternScore: PatternScoreResult | undefined
+  patternScore: PatternScoreResult | undefined,
+  perDocSections?: PerDocSection[]
 ) {
   if (!hasConfiguredLlm()) return null;
 
@@ -1005,7 +1014,13 @@ async function callQualificationLlm(
                 pointsVigilance: fiche.pointsVigilance
               },
               generationRequirement:
-                "Générer impérativement clientContext, scopeSynthesis, businessIssues, winThemes, risks et clarificationQuestions depuis l'analyse du documentExtract et des sections extraites. Si le document ne contient pas l'information, écrire À confirmer / Non trouvé dans le document."
+                "Générer impérativement clientContext, scopeSynthesis, businessIssues, winThemes, risks et clarificationQuestions depuis l'analyse du documentExtract et des sections extraites. Si le document ne contient pas l'information, écrire À confirmer / Non trouvé dans le document.",
+              perDocumentSections: perDocSections?.map((d) => ({
+                kind: d.kind,
+                name: d.name,
+                signals: d.signals,
+                sections: d.sections
+              }))
             },
             ficheExtractive: fiche,
             sources,
@@ -1052,7 +1067,7 @@ export async function generateIntelligentQualification(
   fiche: QualificationFiche,
   referentials: ReferentielItem[],
   enrichWeb: boolean,
-  options: { llmTimeoutMs?: number } = {}
+  options: { llmTimeoutMs?: number; perDocSections?: PerDocSection[] } = {}
 ): Promise<IntelligentQualificationFiche> {
   const sources = await researchQualificationContext(ao, enrichWeb);
   const patternScore = scoreAoFromPatterns(`${fiche.documentExtract || ""}\n${fiche.objet || ""}\n${fiche.perimetre || ""}\n${fiche.livrables || ""}\n${fiche.criteres || ""}`, ao.client || "");
@@ -1062,16 +1077,16 @@ export async function generateIntelligentQualification(
     `Patterns Sia détectés : ${patternScore.activated.length ? patternScore.activated.map((hit) => hit.patternId).join(", ") : "aucun"}.`
   ].filter(Boolean);
 
-  const llmTimeoutMs = options.llmTimeoutMs ?? 0;
+  const { llmTimeoutMs = 0, perDocSections } = options;
   let raw: Record<string, unknown> | null = null;
   if (llmTimeoutMs > 0) {
     raw = await Promise.race([
-      callQualificationLlm(ao, fiche, sources, referentials, patternScore).catch(() => null),
+      callQualificationLlm(ao, fiche, sources, referentials, patternScore, perDocSections).catch(() => null),
       sleep(llmTimeoutMs).then(() => null)
     ]);
     if (!raw) assumptions.push(`Analyse LLM tronquée après ${Math.round(llmTimeoutMs / 1000)} s (mode archive ZIP / serverless).`);
   } else {
-    raw = await callQualificationLlm(ao, fiche, sources, referentials, patternScore).catch(() => null);
+    raw = await callQualificationLlm(ao, fiche, sources, referentials, patternScore, perDocSections).catch(() => null);
   }
 
   return normalizeIntelligence(ao, fiche, raw, sources, assumptions, { patternScore, referentials });

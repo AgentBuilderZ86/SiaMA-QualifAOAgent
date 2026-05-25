@@ -1,9 +1,9 @@
 import { aoRepository } from "@/lib/aoRepository";
 import {
-  extractDocumentSections,
+  buildDocumentDigest,
+  mergeDocumentSections,
   extractUploadedDocuments,
-  isServerlessRuntime,
-  summarizeDocumentText
+  isServerlessRuntime
 } from "@/lib/documents";
 import { NETLIFY_MAX_DURATION_MS, QUALIFICATION_BUDGET_MS } from "@/lib/constants";
 import { extractKeyMetadata, isPlaceholderSection } from "@/lib/qualification/documentMetadata";
@@ -201,17 +201,18 @@ export async function saveQualification(
     (acc, document) => ({ ...acc, ...parseFilenameSignals(document.name || "") }),
     parseFilenameSignals(documentName || "")
   );
-  const documentCorpus = joinQualificationDocuments(documents, manualExtract);
-  if (!documentCorpus.trim() && !existingFiche?.documentExtract) {
+  const { digest, perDocSections } = buildDocumentDigest(documents, manualExtract);
+  const hasContent = documents.some((d) => d.text.trim()) || manualExtract.trim() || existingFiche?.documentExtract;
+  if (!hasContent) {
     throw new Error(
       "Ajoutez au moins un document AO (Avis, CPS, RC), importez les pièces source ou collez un extrait manuel."
     );
   }
-  const prefixedDocText =
-    filenameSignalsPrefix(filenameSignals) +
-    (documentCorpus || existingFiche?.documentExtract || "");
-  const documentExtract = summarizeDocumentText(prefixedDocText, manualExtract);
-  const sectionsRaw = extractDocumentSections(documentExtract);
+  const filenamePrefix = filenameSignalsPrefix(filenameSignals);
+  const documentExtract = digest
+    ? filenamePrefix + digest
+    : filenamePrefix + (existingFiche?.documentExtract || manualExtract);
+  const sectionsRaw = mergeDocumentSections(perDocSections);
   const meta = extractKeyMetadata(documentExtract);
 
   let mergedBudget = sectionsRaw.budget;
@@ -340,7 +341,8 @@ export async function saveQualification(
     )
   ]);
   fiche.intelligence = await generateIntelligentQualification(ao, fiche, referentials, enrichWeb, {
-    llmTimeoutMs
+    llmTimeoutMs,
+    perDocSections
   });
   remapFicheFromIntelligence(fiche);
 

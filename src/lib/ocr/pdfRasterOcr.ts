@@ -1,4 +1,4 @@
-import { createCanvas } from "@napi-rs/canvas";
+import type { createCanvas as CreateCanvasFn } from "@napi-rs/canvas";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createRequire } from "node:module";
 import { recognizeImageBuffer } from "@/lib/ocr/tesseractOcr";
@@ -14,6 +14,7 @@ try {
 
 // 2.5 → ~180 DPI — meilleure reconnaissance Tesseract sur scans basse résolution
 const RENDER_SCALE = 2.5;
+const PAGE_OCR_TIMEOUT_MS = 20_000;
 
 function maxOcrPages() {
   const configured = Number(process.env.AO_OCR_MAX_PDF_PAGES || "");
@@ -26,6 +27,13 @@ function maxOcrPages() {
 
 export async function ocrPdfBuffer(buffer: Buffer): Promise<{ text: string; warning: string }> {
   if (!buffer.length) return { text: "", warning: "PDF vide." };
+
+  // Dynamic import — évite le crash Lambda à l'initialisation du module
+  const canvasMod = await import("@napi-rs/canvas").catch(() => null);
+  if (!canvasMod) {
+    return { text: "", warning: "@napi-rs/canvas non disponible (environnement serverless)." };
+  }
+  const createCanvas = canvasMod.createCanvas as typeof CreateCanvasFn;
 
   const warnings: string[] = [];
   const parts: string[] = [];
@@ -55,7 +63,18 @@ export async function ocrPdfBuffer(buffer: Buffer): Promise<{ text: string; warn
         viewport
       }).promise;
       const png = canvas.toBuffer("image/png");
-      const ocr = await recognizeImageBuffer(png, `pdf-p${pageNum}`);
+
+      // Timeout 20s par page pour rester dans le budget Netlify (60s total)
+      const ocr = await Promise.race([
+        recognizeImageBuffer(png, `pdf-p${pageNum}`),
+        new Promise<{ text: string; warning: string }>((resolve) =>
+          setTimeout(
+            () => resolve({ text: "", warning: `OCR page ${pageNum} : délai dépassé (20s).` }),
+            PAGE_OCR_TIMEOUT_MS
+          )
+        )
+      ]);
+
       if (ocr.text.trim()) parts.push(ocr.text);
       if (ocr.warning) warnings.push(ocr.warning);
     }

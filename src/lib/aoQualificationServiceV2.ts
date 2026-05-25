@@ -1,7 +1,7 @@
 import { aoRepository } from "@/lib/aoRepository";
 import {
-  extractDocumentSections,
-  summarizeDocumentText,
+  buildDocumentDigest,
+  mergeDocumentSections,
   isServerlessRuntime
 } from "@/lib/documents";
 import { NETLIFY_MAX_DURATION_MS, QUALIFICATION_BUDGET_MS } from "@/lib/constants";
@@ -82,14 +82,6 @@ export async function saveQualificationV2(
 
   const manualExtract = body.manualExtract?.trim() ?? "";
   const documents = body.documents ?? [];
-  const documentCorpus = buildCorpus(documents, manualExtract);
-
-  if (!documentCorpus.trim()) {
-    throw new Error(
-      "Ajoutez au moins un document AO (Avis, CPS, RC) ou collez un extrait manuel."
-    );
-  }
-
   const documentName = documents
     .map((d) => d.name)
     .filter(Boolean)
@@ -98,9 +90,29 @@ export async function saveQualificationV2(
     (acc, d) => ({ ...acc, ...parseFilenameSignals(d.name || "") }),
     parseFilenameSignals(documentName || "")
   );
-  const prefixedDocText = filenameSignalsPrefix(filenameSignals) + documentCorpus;
-  const documentExtract = summarizeDocumentText(prefixedDocText, manualExtract);
-  const sectionsRaw = extractDocumentSections(documentExtract);
+
+  const docsAsExtractionsEarly: QualificationDocumentExtraction[] = documents.map((d) => ({
+    kind: d.kind,
+    name: d.name,
+    text: d.text,
+    warning: d.warning ?? "",
+    extractionMode: d.extractionMode ?? "native",
+    ocrUsed: d.ocrUsed,
+    extractedAt: new Date().toISOString()
+  }));
+
+  const { digest, perDocSections } = buildDocumentDigest(docsAsExtractionsEarly, manualExtract);
+
+  const hasContent = docsAsExtractionsEarly.some((d) => d.text.trim()) || manualExtract.trim();
+  if (!hasContent) {
+    throw new Error(
+      "Ajoutez au moins un document AO (Avis, CPS, RC) ou collez un extrait manuel."
+    );
+  }
+
+  const filenamePrefix = filenameSignalsPrefix(filenameSignals);
+  const documentExtract = digest ? filenamePrefix + digest : filenamePrefix + manualExtract;
+  const sectionsRaw = mergeDocumentSections(perDocSections);
   const meta = extractKeyMetadata(documentExtract);
 
   let mergedBudget = sectionsRaw.budget;
@@ -142,15 +154,7 @@ export async function saveQualificationV2(
       : undefined;
 
   const pipelineNotes = extractionStatus(documents, manualExtract);
-  const docsAsExtractions: QualificationDocumentExtraction[] = documents.map((d) => ({
-    kind: d.kind,
-    name: d.name,
-    text: d.text,
-    warning: d.warning ?? "",
-    extractionMode: d.extractionMode ?? "native",
-    ocrUsed: d.ocrUsed,
-    extractedAt: new Date().toISOString()
-  }));
+  const docsAsExtractions = docsAsExtractionsEarly;
 
   const fiche: QualificationFiche = {
     contexte: fromField("contexte", sections.contexte),
@@ -208,7 +212,8 @@ export async function saveQualificationV2(
       )
     ]),
     generateIntelligentQualification(ao, fiche, referentials, body.enrichWeb ?? false, {
-      llmTimeoutMs: adaptiveIntMs
+      llmTimeoutMs: adaptiveIntMs,
+      perDocSections
     })
   ]);
 

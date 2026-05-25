@@ -1,7 +1,4 @@
 import crypto from "node:crypto";
-import { ocrPdfBuffer } from "@/lib/ocr/pdfRasterOcr";
-import { recognizeImageBuffer } from "@/lib/ocr/tesseractOcr";
-import { extractWithPaddleOcr, paddleOcrConfigured } from "@/lib/ocr/paddleOcr";
 import type { QualificationDocumentExtraction, QualificationDocumentKind } from "@/lib/aoTypes";
 import {
   DOCUMENT_LIMITS,
@@ -322,6 +319,13 @@ async function runOcrFallback(buffer: Buffer, name: string, contentType: string)
   if (provider === "none") {
     return { text: "", warning: "OCR désactivé (OCR_PROVIDER=none)." };
   }
+
+  // Imports dynamiques — évite de charger @napi-rs/canvas (addon natif) à l'init du module
+  const [{ ocrPdfBuffer }, { recognizeImageBuffer }, { extractWithPaddleOcr, paddleOcrConfigured }] = await Promise.all([
+    import("@/lib/ocr/pdfRasterOcr"),
+    import("@/lib/ocr/tesseractOcr"),
+    import("@/lib/ocr/paddleOcr")
+  ]);
 
   if (provider === "paddle" || provider === "paddleocr") {
     const paddle = await extractWithPaddleOcr(buffer, name, contentType);
@@ -738,4 +742,116 @@ export function summarizeDocumentText(text: string, fallback: string) {
   const normalized = cleanText(text || fallback || "");
   if (!normalized) return "Non trouvé dans le document.";
   return normalized.slice(0, 6000);
+}
+
+export type DocumentSignals = {
+  hasBudget: boolean;
+  hasDelai: boolean;
+  hasProfil: boolean;
+  hasGroupement: boolean;
+  hasReference: boolean;
+  hasNoteEvaluation: boolean;
+};
+
+export function detectDocumentSignals(text: string): DocumentSignals {
+  return {
+    hasBudget:         /\b\d[\d\s]{3,}\b\s*(dh|mad|dirham|m\s*dh|million)/i.test(text),
+    hasDelai:          /délai|durée|mois|semaine|calendrier|planning|échéance/i.test(text),
+    hasProfil:         /expert|ingénieur|consultant|manager|chef de projet|profil requis/i.test(text),
+    hasGroupement:     /groupement|cotraitance|sous-traitance/i.test(text),
+    hasReference:      /référence|expérience similaire|attestation|track record/i.test(text),
+    hasNoteEvaluation: /note technique|offre financ|critère d'évaluation|pondération/i.test(text)
+  };
+}
+
+export function buildDocumentDigest(
+  documents: QualificationDocumentExtraction[],
+  manualExtract: string,
+  maxCharsPerDoc = 20_000
+): {
+  digest: string;
+  perDocSections: Array<{
+    kind: QualificationDocumentKind;
+    name: string;
+    sections: DocumentSections;
+    signals: DocumentSignals;
+  }>;
+} {
+  const perDocSections = documents
+    .filter((doc) => doc.text.trim())
+    .map((doc) => ({
+      kind: (doc.kind ?? "Autre") as QualificationDocumentKind,
+      name: doc.name,
+      sections: extractDocumentSections(doc.text.slice(0, maxCharsPerDoc)),
+      signals: detectDocumentSignals(doc.text)
+    }));
+
+  const PLACEHOLDER = "Non trouvé dans le document";
+  const digestParts = perDocSections.map(({ kind, name, sections }) => {
+    const relevant = [
+      sections.objet,
+      sections.perimetre,
+      sections.livrables,
+      sections.profils,
+      sections.criteres,
+      sections.budget,
+      sections.duree
+    ].filter((s) => s && s.trim() && !s.startsWith(PLACEHOLDER));
+    return `--- ${kind} : ${name} ---\n${relevant.join("\n\n")}`;
+  });
+
+  if (manualExtract.trim()) digestParts.push(`--- Extrait manuel ---\n${manualExtract.trim()}`);
+
+  return {
+    digest: digestParts.join("\n\n---\n\n").slice(0, 30_000),
+    perDocSections
+  };
+}
+
+export function mergeDocumentSections(
+  perDocSections: Array<{ kind: QualificationDocumentKind; sections: DocumentSections }>
+): DocumentSections {
+  const priority: QualificationDocumentKind[] = ["CPS", "RC", "Avis", "Autre"];
+  const PLACEHOLDER = "Non trouvé dans le document";
+
+  function pick(
+    field: keyof DocumentSections,
+    kindPriority: QualificationDocumentKind[] = priority
+  ): string {
+    const sorted = [...perDocSections].sort(
+      (a, b) => kindPriority.indexOf(a.kind) - kindPriority.indexOf(b.kind)
+    );
+    for (const { sections } of sorted) {
+      const val = sections[field] as string;
+      if (val && val.trim() && !val.startsWith(PLACEHOLDER)) return val;
+    }
+    return "";
+  }
+
+  function pickArray(
+    field: keyof DocumentSections,
+    kindPriority: QualificationDocumentKind[] = priority
+  ): string[] {
+    const sorted = [...perDocSections].sort(
+      (a, b) => kindPriority.indexOf(a.kind) - kindPriority.indexOf(b.kind)
+    );
+    for (const { sections } of sorted) {
+      const val = sections[field] as string[];
+      if (Array.isArray(val) && val.length) return val;
+    }
+    return [];
+  }
+
+  return {
+    contexte:        pick("contexte"),
+    objet:           pick("objet", ["Avis", "CPS", "RC", "Autre"]),
+    perimetre:       pick("perimetre"),
+    livrables:       pick("livrables"),
+    duree:           pick("duree"),
+    profils:         pick("profils"),
+    criteres:        pick("criteres", ["RC", "CPS", "Avis", "Autre"]),
+    budget:          pick("budget"),
+    risques:         pick("risques"),
+    pointsVigilance: perDocSections.flatMap((d) => d.sections.pointsVigilance as string[])
+  };
 }
