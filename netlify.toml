@@ -24,6 +24,7 @@
 ## Server Actions / API qualification (ZIP + OCR + IA) : maxDuration=60 dans la route API.
 [functions]
   node_bundler = "esbuild"
+  timeout = 26
 
 ## Large uploads: Server Actions body size is controlled by Next config (26mb)
 ## ; archives ZIP plafonnées à 25 Mo côté application.
