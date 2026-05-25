@@ -37,7 +37,14 @@ jobs:
         run: npx playwright install chromium --with-deps
       - name: Build
         run: npm run build
+        env:
+          APP_USER_EMAIL: ${{ secrets.APP_USER_EMAIL }}
+          APP_USER_PASSWORD: ${{ secrets.APP_USER_PASSWORD }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
       - name: E2E
         run: npx playwright test
         env:
           CI: true
+          APP_USER_EMAIL: ${{ secrets.APP_USER_EMAIL }}
+          APP_USER_PASSWORD: ${{ secrets.APP_USER_PASSWORD }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
