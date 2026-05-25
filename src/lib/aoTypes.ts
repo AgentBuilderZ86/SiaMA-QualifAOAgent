@@ -135,6 +135,17 @@ export function remapFicheFromIntelligence(fiche: QualificationFiche): void {
     fiche.risques = intel.risks.map((r) => `• ${r.label} (${r.severity}) : ${r.mitigation}`).join("\n");
   if (intel.decisionWatchpoints?.length)
     fiche.pointsVigilance = intel.decisionWatchpoints.map((w) => w.point);
+
+  // Rebuild documentExtract as a clean LLM-generated summary (replaces raw PDF block)
+  const summaryParts: string[] = [];
+  if (intel.executiveSummary) summaryParts.push(`[Synthèse]\n${intel.executiveSummary}`);
+  if (intel.clientContext) summaryParts.push(`[Contexte client]\n${intel.clientContext}`);
+  if (intel.scopeSynthesis) summaryParts.push(`[Périmètre]\n${intel.scopeSynthesis}`);
+  if (intel.businessIssues?.length)
+    summaryParts.push(`[Enjeux]\n${intel.businessIssues.map((i) => `• ${i}`).join("\n")}`);
+  if (intel.expectedDeliverables?.length)
+    summaryParts.push(`[Livrables]\n${intel.expectedDeliverables.map((d) => `• ${d}`).join("\n")}`);
+  if (summaryParts.length) fiche.documentExtract = summaryParts.join("\n\n").slice(0, 3000);
 }
 
 const GSHEETS_CELL_LIMIT = 49_000;
@@ -147,7 +158,7 @@ const GSHEETS_CELL_LIMIT = 49_000;
 export function ficheForGSheets(fiche: QualificationFiche): QualificationFiche {
   const stripped: QualificationFiche = {
     ...fiche,
-    documentExtract: "",
+    documentExtract: fiche.documentExtract?.slice(0, 3000) || "",
     documents: fiche.documents?.map(({ text: _text, ...rest }) => ({ ...rest, text: "" })),
     intelligence: fiche.intelligence
       ? { ...fiche.intelligence, pptCopyBlock: "" }

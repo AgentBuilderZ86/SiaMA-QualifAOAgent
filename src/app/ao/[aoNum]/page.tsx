@@ -197,10 +197,12 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
 
             <QualificationDocumentsPanel documents={qualification.documents || []} />
 
-            <details className="extract-panel">
-              <summary>Voir l'extrait documentaire analysé</summary>
-              <pre className="pre">{qualification.documentExtract}</pre>
-            </details>
+            {qualification.documentExtract ? (
+              <details className="extract-panel">
+                <summary>Voir l'extrait documentaire analysé</summary>
+                <pre className="pre">{qualification.documentExtract}</pre>
+              </details>
+            ) : null}
           </>
         ) : (
           <div className="card section">
