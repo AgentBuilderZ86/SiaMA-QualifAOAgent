@@ -18,7 +18,8 @@ export async function extractWithPaddleOcr(
   }
 
   const form = new FormData();
-  const blob = new Blob([buffer], { type: contentType || "application/octet-stream" });
+  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+  const blob = new Blob([arrayBuffer], { type: contentType || "application/octet-stream" });
   form.append("file", blob, filename);
   form.append("lang", PADDLE_OCR_LANG);
 
