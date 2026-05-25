@@ -81,7 +81,41 @@ export async function POST(
 
     const kind = kindFromField(fieldName);
     const buffer = Buffer.from(await file.arrayBuffer());
-    const isPdf = file.name.toLowerCase().endsWith(".pdf") || (file.type || "").includes("pdf");
+    const nameLower = file.name.toLowerCase();
+    const mimeType = (file.type || "").toLowerCase();
+    const isPdf = nameLower.endsWith(".pdf") || mimeType.includes("pdf");
+    const isTxt = nameLower.endsWith(".txt") || mimeType.startsWith("text/");
+    const isDocx = nameLower.endsWith(".docx") || mimeType.includes("wordprocessingml");
+
+    // Fichiers texte brut
+    if (isTxt) {
+      const text = buffer.toString("utf8").replace(/\r/g, "\n").replace(/[ \t]+/g, " ").trim();
+      return NextResponse.json({
+        text: text.slice(0, 50_000),
+        warning: text ? "" : "Fichier texte vide.",
+        kind,
+        ocrUsed: false,
+        extractionMode: text ? "native" : "unreadable"
+      });
+    }
+
+    // Fichiers Word DOCX
+    if (isDocx) {
+      try {
+        const mammoth = await import("mammoth");
+        const result = await mammoth.extractRawText({ buffer });
+        const text = (result.value || "").replace(/\r/g, "\n").replace(/[ \t]+/g, " ").trim();
+        return NextResponse.json({
+          text: text.slice(0, 50_000),
+          warning: text ? "" : "DOCX sans contenu texte lisible.",
+          kind,
+          ocrUsed: false,
+          extractionMode: text ? "native" : "unreadable"
+        });
+      } catch {
+        return NextResponse.json({ text: "", warning: "Erreur extraction DOCX.", kind, ocrUsed: false, extractionMode: "unreadable" });
+      }
+    }
 
     // 1. Extraction native (texte intégré dans le PDF)
     let nativeText = "";
