@@ -162,8 +162,9 @@ NOGO_PATTERNS: list[dict[str, Any]] = [
      "keywords": ["developpement d'un site web","développement d'un site web","site web institutionnel"]},
     {"id": "btp-construction",       "is_watch": False,
      "reason": "NO GO — BTP / Génie civil hors périmètre conseil",
-     "keywords": ["batiment","bâtiment","genie civil","génie civil","construction",
-                  "travaux publics","btp","architecte","maîtrise d'œuvre"]},
+     "keywords": ["batiment","bâtiment","genie civil","génie civil",
+                  "travaux de construction","travaux publics","btp",
+                  "architecte","maîtrise d'œuvre","chantier"]},
     {"id": "agrements-specifiques",  "is_watch": False,
      "reason": "NO GO — Agréments techniques spécifiques requis",
      "keywords": ["agrement d13","agrément d13","bureau d'etudes agréé","bureau d'études agréé",
@@ -241,11 +242,15 @@ def parse_filename(path: str) -> dict[str, str | None]:
     if m:
         ao_num = m.group(1)
 
+    _skip = {"rfp", "cps", "rc", "avis", "appel", "ao", "doc",
+             "file", "tdr", "tdm", "dossier", "offre", "cahier"}
     segments = re.split(r"[_\-.\s]+", stem)
     for seg in segments:
         if re.fullmatch(r"\d+", seg):
             continue
         if re.fullmatch(r"(?:" + MONTHS_FR + r")", seg, re.IGNORECASE):
+            continue
+        if seg.lower() in _skip:
             continue
         if len(seg) >= 3 and re.search(r"[a-zA-ZÀ-ÿ]", seg):
             client = seg.upper()
