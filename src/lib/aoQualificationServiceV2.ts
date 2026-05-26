@@ -9,6 +9,8 @@ import { extractKeyMetadata, isPlaceholderSection } from "@/lib/qualification/do
 import { filenameSignalsPrefix, parseFilenameSignals } from "@/lib/qualification/filenameSignals";
 import { generateQualificationRecommendation } from "@/lib/llm";
 import { generateIntelligentQualification } from "@/lib/qualification/intelligence";
+import { scoreAoFromPatterns } from "@/lib/qualification/patterns";
+import type { PatternScoreResult } from "@/lib/qualification/patterns";
 import type {
   QualificationDocumentExtraction,
   QualificationDocumentKind,
@@ -184,6 +186,11 @@ export async function saveQualificationV2(
     extractionEvidence
   };
 
+  const patternScore: PatternScoreResult = scoreAoFromPatterns(
+    `${fiche.documentExtract || ""}\n${fiche.objet || ""}\n${fiche.perimetre || ""}\n${fiche.livrables || ""}\n${fiche.criteres || ""}`,
+    ao.client || ""
+  );
+
   // Adaptive LLM budget — based on elapsed time after Sheets reads
   const serverless = isServerlessRuntime();
   const elapsedMs = Date.now() - startMs;
@@ -204,8 +211,8 @@ export async function saveQualificationV2(
           () =>
             resolve(
               serverless
-                ? "Recommandation : basée sur l'extraction documentaire (IA tronquée — délai Netlify)."
-                : "Recommandation : analyse documentaire disponible."
+                ? `Recommandation pattern : ${patternScore.decisionLabel} — score ${patternScore.score}/15 (IA tronquée — délai Netlify).`
+                : `Recommandation pattern : ${patternScore.decisionLabel} — score ${patternScore.score}/15.`
             ),
           adaptiveRecMs
         )
@@ -213,7 +220,8 @@ export async function saveQualificationV2(
     ]),
     generateIntelligentQualification(ao, fiche, referentials, body.enrichWeb ?? false, {
       llmTimeoutMs: adaptiveIntMs,
-      perDocSections
+      perDocSections,
+      patternScore
     })
   ]);
 

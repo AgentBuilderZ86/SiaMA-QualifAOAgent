@@ -1072,10 +1072,15 @@ export async function generateIntelligentQualification(
   fiche: QualificationFiche,
   referentials: ReferentielItem[],
   enrichWeb: boolean,
-  options: { llmTimeoutMs?: number; perDocSections?: PerDocSection[] } = {}
+  options: { llmTimeoutMs?: number; perDocSections?: PerDocSection[]; patternScore?: PatternScoreResult } = {}
 ): Promise<IntelligentQualificationFiche> {
   const sources = await researchQualificationContext(ao, enrichWeb);
-  const patternScore = scoreAoFromPatterns(`${fiche.documentExtract || ""}\n${fiche.objet || ""}\n${fiche.perimetre || ""}\n${fiche.livrables || ""}\n${fiche.criteres || ""}`, ao.client || "");
+  const patternScore =
+    options.patternScore ??
+    scoreAoFromPatterns(
+      `${fiche.documentExtract || ""}\n${fiche.objet || ""}\n${fiche.perimetre || ""}\n${fiche.livrables || ""}\n${fiche.criteres || ""}`,
+      ao.client || ""
+    );
   const assumptions = [
     enrichWeb ? "" : "Enrichissement web non demandé lors de la génération.",
     sources.length ? "" : "Aucune source externe fiable n'a été trouvée automatiquement.",

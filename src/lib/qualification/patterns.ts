@@ -302,7 +302,7 @@ export const NOGO_PATTERNS: NogoPatternDefinition[] = [
   },
   {
     id: "btp-construction",
-    keywords: ["batiment", "bâtiment", "genie civil", "génie civil", "construction", "travaux publics", "btp", "architecte", "maîtrise d'œuvre"],
+    keywords: ["batiment", "bâtiment", "genie civil", "génie civil", "travaux de construction", "travaux publics", "btp", "architecte batiment", "maîtrise d'œuvre"],
     reason: "NO GO — BTP / Génie civil hors périmètre conseil"
   },
   {

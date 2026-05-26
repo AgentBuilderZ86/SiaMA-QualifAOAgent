@@ -164,7 +164,7 @@ NOGO_PATTERNS: list[dict[str, Any]] = [
      "reason": "NO GO — BTP / Génie civil hors périmètre conseil",
      "keywords": ["batiment","bâtiment","genie civil","génie civil",
                   "travaux de construction","travaux publics","btp",
-                  "architecte","maîtrise d'œuvre","chantier"]},
+                  "architecte batiment","maîtrise d'œuvre","chantier"]},
     {"id": "agrements-specifiques",  "is_watch": False,
      "reason": "NO GO — Agréments techniques spécifiques requis",
      "keywords": ["agrement d13","agrément d13","bureau d'etudes agréé","bureau d'études agréé",
