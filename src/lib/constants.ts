@@ -24,8 +24,8 @@ export const QUALIFICATION_BUDGET_MS = {
   },
   /** Timeout pour l'appel LLM d'intelligence (complexe, réponse structurée). */
   intelligence: {
-    serverless: 28_000,
-    zip: 22_000,
+    serverless: 44_000,
+    zip: 30_000,
     local: 0, // pas de timeout en local
   },
 } as const;

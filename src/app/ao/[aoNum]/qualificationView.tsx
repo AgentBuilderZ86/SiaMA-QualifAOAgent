@@ -187,7 +187,10 @@ export function QualificationIntelligenceView({
   if (!fiche) return <p className="muted">Aucune fiche qualification enregistrée.</p>;
 
   if (!intelligence) {
-    const isPartialSave = Boolean(fiche.recommendation?.includes("génération IA en cours"));
+    const isPartialSave = Boolean(
+      fiche.recommendation?.includes("génération IA en cours") ||
+      fiche.recommendation?.includes("IA tronquée")
+    );
     const qualifHref = ao ? `/ao/${encodeURIComponent(ao.aoNum)}/qualification?resumeAI=1` : null;
     return (
       <div className="info-grid">

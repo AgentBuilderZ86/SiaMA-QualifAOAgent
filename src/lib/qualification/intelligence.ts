@@ -1027,7 +1027,18 @@ async function callQualificationLlm(
                 sections: d.sections
               }))
             },
-            ficheExtractive: fiche,
+            ficheExtractive: {
+              contexte:  (fiche.contexte  || "").slice(0, 500),
+              objet:     (fiche.objet     || "").slice(0, 500),
+              perimetre: (fiche.perimetre || "").slice(0, 600),
+              livrables: (fiche.livrables || "").slice(0, 500),
+              duree:     (fiche.duree     || "").slice(0, 200),
+              budget:    (fiche.budget    || "").slice(0, 200),
+              criteres:  (fiche.criteres  || "").slice(0, 500),
+              profils:   (fiche.profils   || "").slice(0, 500),
+              risques:   (fiche.risques   || "").slice(0, 400),
+              recommendation: fiche.recommendation
+            },
             sources,
             referentials,
             patternScoring: patternScore
