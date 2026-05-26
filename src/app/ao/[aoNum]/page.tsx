@@ -90,7 +90,7 @@ export default async function AoDetailPage({ params }: { params: Promise<{ aoNum
           <div className="num" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Pill status={ao.statut} />
           </div>
-          <div className="delta">{ao.decisionIa ? `Reco : ${ao.decisionIa}` : "Reco à venir"}</div>
+          <div className="delta" style={{ whiteSpace: "pre-wrap" }}>{ao.decisionIa ? `Reco : ${ao.decisionIa.replace(/\\n/g, "\n")}` : "Reco à venir"}</div>
         </div>
         <div className="kpi">
           <div className="lbl">Délai</div>

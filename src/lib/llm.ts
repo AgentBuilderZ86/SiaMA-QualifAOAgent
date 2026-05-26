@@ -154,7 +154,17 @@ export async function generateQualificationRecommendation(ao: AoRecord, fiche: Q
   return generateWithGuardrails({
     task: "Produire une recommandation GO/WATCH/NO GO argumentée pour la qualification.",
     ao,
-    context: JSON.stringify(fiche),
+    context: [
+      `Contexte client : ${fiche.contexte || "NC"}`,
+      `Objet / mission : ${fiche.objet || "NC"}`,
+      `Périmètre : ${fiche.perimetre || "NC"}`,
+      `Livrables : ${fiche.livrables || "NC"}`,
+      `Durée : ${fiche.duree || "NC"}`,
+      `Budget : ${fiche.budget || "NC"}`,
+      `Critères d'évaluation : ${fiche.criteres || "NC"}`,
+      `Risques & contraintes : ${fiche.risques || "NC"}`,
+      `Points de vigilance : ${(fiche.pointsVigilance ?? []).join(" | ") || "NC"}`
+    ].join("\n"),
     sources: ["Google Sheets AO", fiche.documentName || "Saisie qualification"]
   });
 }
